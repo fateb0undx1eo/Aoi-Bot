@@ -1,14 +1,11 @@
 {
   "name": "aoi-bot",
   "version": "1.0.0",
-  "description": "Aoi Senpai Discord Bot",
-  "main": "index.js",
+  "description": "Aoi Discord Bot hosted on Render",
+  "main": "server.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node server.js"
   },
-  "keywords": ["discord", "bot", "aoi"],
-  "author": "YourName",
-  "license": "ISC",
   "dependencies": {
     "axios": "^1.11.0",
     "discord.js": "^14.21.0",
