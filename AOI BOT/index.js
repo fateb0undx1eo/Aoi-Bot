@@ -1,11 +1,11 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const expressKeepAlive = require('./server.js'); // Keep-alive server
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
-const autoPosterManager = require('./utils/autoPosterManager'); // Modular autoposters
+const { startAutoPoster } = require('./utils/autoPoster');
 
 const TOKEN = process.env.TOKEN;
+const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const PREFIX = 's!';
 
 // ---------- PATCH: global rejection handler ----------
@@ -18,14 +18,14 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers // for userinfo/serverinfo
+        GatewayIntentBits.GuildMembers // PATCH: future-proof for userinfo etc.
     ],
     partials: [Partials.Channel]
 });
 
 client.commands = new Collection();
 
-// ---------- Command Loader ----------
+// ---------- PATCH: smarter command loader ----------
 function loadCommands(dirPath = path.join(__dirname, 'commands')) {
     const files = fs.readdirSync(dirPath);
     for (const file of files) {
@@ -35,7 +35,7 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
         if (stat.isDirectory()) {
             loadCommands(fullPath);
         } else if (file.endsWith('.js')) {
-            delete require.cache[require.resolve(fullPath)];
+            delete require.cache[require.resolve(fullPath)]; // PATCH: hot-reload friendly
             const command = require(fullPath);
             if (command.name && typeof command.execute === 'function') {
                 client.commands.set(command.name, command);
@@ -49,16 +49,13 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
 
 loadCommands();
 
-// ---------- When bot is ready ----------
 client.once('ready', () => {
     console.log(`${client.user.tag} is online!`);
+    startAutoPoster(client, MEME_CHANNEL_ID);
+    // ---------- PATCH: simple presence ----------
     client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
-
-    // Start all autoposters (memes, quotes, etc.)
-    autoPosterManager(client);
 });
 
-// ---------- Slash Commands ----------
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
     const command = client.commands.get(interaction.commandName);
@@ -76,7 +73,6 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// ---------- Prefix Commands ----------
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
@@ -93,6 +89,4 @@ client.on('messageCreate', async message => {
     }
 });
 
-// ---------- Login bot and start keep-alive server ----------
 client.login(TOKEN);
-expressKeepAlive();
