@@ -2,6 +2,8 @@ const { SlashCommandBuilder } = require('discord.js');
 const quoteManager = require('../utils/quoteManager');
 
 module.exports = {
+  name: 'quote',  // <-- Add this
+
   data: new SlashCommandBuilder()
     .setName('quote')
     .setDescription('Quote related commands')
@@ -60,10 +62,6 @@ module.exports = {
       if (!channel) {
         return message.reply('Please mention a channel.');
       }
-      // Construct a fake interaction object for compatibility or create a new interface for your quoteManager methods
-      // Here simplified: manually call quoteManager with channel and message info
-      // You should extend your quoteManager methods for this use case or refactor to accept plain params
-      // For demo:
       if (!quoteManager.guildConfigs) quoteManager.loadConfig();
       if (!quoteManager.guildConfigs[message.guild.id]) quoteManager.guildConfigs[message.guild.id] = {};
       quoteManager.guildConfigs[message.guild.id].quoteChannelId = channel.id;
