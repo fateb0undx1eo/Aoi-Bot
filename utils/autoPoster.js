@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const fetchMeme = require('./fetchMeme');
-const memeSubreddits = require('./memesubreddits'); // Import shared subreddit list
+const memeSubreddits = require('../memesubreddits'); // Import shared subreddit list
 
 let autoPostInterval = null;
 let nextPostTime = null;
