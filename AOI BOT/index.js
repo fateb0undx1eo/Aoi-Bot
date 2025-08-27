@@ -4,7 +4,6 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const { startAutoPoster } = require('./utils/autoPoster');
 const quoteManager = require('./utils/quoteManager'); // Import quoteManager
-
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const PREFIX = 's!';
@@ -23,6 +22,7 @@ const client = new Client({
   ],
   partials: [Partials.Channel]
 });
+
 client.commands = new Collection();
 
 // ---------- PATCH: smarter command loader ----------
@@ -54,8 +54,15 @@ client.once('ready', () => {
 
   // Load guild quote config and start quote scheduler
   quoteManager.loadConfig();
+
   for (const guildId of Object.keys(quoteManager.guildConfigs)) {
-    quoteManager.startScheduler(client, guildId);
+    const config = quoteManager.guildConfigs[guildId];
+    if (config && config.quoteChannelId && config.quoteIntervalHours) {
+      console.log(`Starting quote scheduler for guild ${guildId} with interval ${config.quoteIntervalHours} hour(s).`);
+      quoteManager.startScheduler(client, guildId);
+    } else {
+      console.log(`Skipping quote scheduler for guild ${guildId} due to missing config.`);
+    }
   }
 
   // ---------- PATCH: simple presence ----------
