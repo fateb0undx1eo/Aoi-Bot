@@ -61,27 +61,33 @@ function startScheduler(client, guildId) {
   if (timers[guildId]) clearInterval(timers[guildId]);
 
   const config = guildConfigs[guildId];
-  if (!config || !config.quoteChannelId || !config.quoteIntervalHours) return;
+  if (!config || !config.quoteChannelId || !config.quoteIntervalHours) {
+    console.log(`Cannot start scheduler for guild ${guildId}: missing config.`);
+    return;
+  }
 
   const intervalMs = config.quoteIntervalHours * 60 * 60 * 1000;
 
-  postQuote(client, guildId)
-    .then(() => {
+  async function postAndSchedule() {
+    try {
+      await postQuote(client, guildId);
       nextQuotePostTimes[guildId] = Date.now() + intervalMs;
-    })
-    .catch(console.error);
+      console.log(`Posted quote and set next post time for guild ${guildId}.`);
+    } catch (error) {
+      console.error(`Error posting quote for guild ${guildId}:`, error);
+    }
+  }
 
-  timers[guildId] = setInterval(() => {
-    postQuote(client, guildId)
-      .then(() => {
-        nextQuotePostTimes[guildId] = Date.now() + intervalMs;
-      })
-      .catch(console.error);
-  }, intervalMs);
+  // Post immediately on scheduler start
+  postAndSchedule();
 
+  // Schedule subsequent posts
+  timers[guildId] = setInterval(postAndSchedule, intervalMs);
+
+  // Set next post time for accuracy
   nextQuotePostTimes[guildId] = Date.now() + intervalMs;
 
-  console.log(`Quote scheduler started for guild ${guildId} with interval ${config.quoteIntervalHours} hour(s)`);
+  console.log(`Quote scheduler started for guild ${guildId} with interval ${config.quoteIntervalHours} hour(s).`);
 }
 
 async function postQuote(client, guildId) {
