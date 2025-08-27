@@ -64,14 +64,24 @@ function startScheduler(client, guildId) {
   if (!config || !config.quoteChannelId || !config.quoteIntervalHours) return;
 
   const intervalMs = config.quoteIntervalHours * 60 * 60 * 1000;
-  nextQuotePostTimes[guildId] = Date.now();
 
-  postQuote(client, guildId);
+  postQuote(client, guildId)
+    .then(() => {
+      nextQuotePostTimes[guildId] = Date.now() + intervalMs;
+    })
+    .catch(console.error);
 
   timers[guildId] = setInterval(() => {
-    postQuote(client, guildId);
-    nextQuotePostTimes[guildId] = Date.now() + intervalMs;
+    postQuote(client, guildId)
+      .then(() => {
+        nextQuotePostTimes[guildId] = Date.now() + intervalMs;
+      })
+      .catch(console.error);
   }, intervalMs);
+
+  nextQuotePostTimes[guildId] = Date.now() + intervalMs;
+
+  console.log(`Quote scheduler started for guild ${guildId} with interval ${config.quoteIntervalHours} hour(s)`);
 }
 
 async function postQuote(client, guildId) {
@@ -88,8 +98,9 @@ async function postQuote(client, guildId) {
 }
 
 function getNextQuoteIn(guildId) {
-  if (!nextQuotePostTimes[guildId]) return null;
-  const diffMs = nextQuotePostTimes[guildId] - Date.now();
+  const nextTime = nextQuotePostTimes[guildId];
+  if (!nextTime) return null;
+  const diffMs = nextTime - Date.now();
   return diffMs > 0 ? Math.floor(diffMs / 1000) : 0;
 }
 
