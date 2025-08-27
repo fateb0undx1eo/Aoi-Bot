@@ -1,5 +1,5 @@
 const fetch = require('node-fetch');
-const memeSubreddits = require('./memesubreddits'); // Import subreddit list
+const memeSubreddits = require('../memesubreddits'); // Import subreddit list
 
 const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID;
 const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET;
@@ -76,3 +76,4 @@ async function fetchMeme(subreddits = memeSubreddits) {
 }
 
 module.exports = fetchMeme;
+
