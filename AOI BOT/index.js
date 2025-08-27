@@ -7,12 +7,10 @@ const quoteManager = require('./utils/quoteManager'); // Import quoteManager
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const PREFIX = 's!';
-
 // ---------- PATCH: global rejection handler ----------
 process.on('unhandledRejection', err => {
   console.error('[Unhandled Rejection]', err);
 });
-
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,9 +20,7 @@ const client = new Client({
   ],
   partials: [Partials.Channel]
 });
-
 client.commands = new Collection();
-
 // ---------- PATCH: smarter command loader ----------
 function loadCommands(dirPath = path.join(__dirname, 'commands')) {
   const files = fs.readdirSync(dirPath);
@@ -46,15 +42,11 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
   }
 }
 loadCommands();
-
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
-
   startAutoPoster(client, MEME_CHANNEL_ID);
-
   // Load guild quote config and start quote scheduler
   quoteManager.loadConfig();
-
   for (const guildId of Object.keys(quoteManager.guildConfigs)) {
     const config = quoteManager.guildConfigs[guildId];
     if (config && config.quoteChannelId && config.quoteIntervalHours) {
@@ -64,11 +56,9 @@ client.once('ready', () => {
       console.log(`Skipping quote scheduler for guild ${guildId} due to missing config.`);
     }
   }
-
   // ---------- PATCH: simple presence ----------
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
-
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const command = client.commands.get(interaction.commandName);
@@ -84,7 +74,6 @@ client.on('interactionCreate', async interaction => {
       : interaction.reply(reply);
   }
 });
-
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
@@ -98,5 +87,4 @@ client.on('messageCreate', async message => {
     message.reply('There was an error executing this command!');
   }
 });
-
 client.login(TOKEN);
