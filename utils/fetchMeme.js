@@ -1,4 +1,5 @@
 const fetch = require('node-fetch');
+const memeSubreddits = require('./memesubreddits'); // Import subreddit list
 
 const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID;
 const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET;
@@ -30,12 +31,11 @@ async function getRedditToken() {
 const validExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
 function isSupportedImage(url) {
   if (!url) return false;
-  // Strip query parameters from URL before check
-  const urlWithoutParams = url.split('?')[0].toLowerCase();
+  const urlWithoutParams = url.split('?')[0].toLowerCase(); // strip URL parameters for extension check
   return validExtensions.some(ext => urlWithoutParams.endsWith(ext));
 }
 
-async function fetchMeme(subreddits = ['dankmemes', 'funny', 'memes']) {
+async function fetchMeme(subreddits = memeSubreddits) {
   const token = await getRedditToken();
   if (!token) return null;
 
@@ -49,6 +49,7 @@ async function fetchMeme(subreddits = ['dankmemes', 'funny', 'memes']) {
   });
 
   const data = await res.json();
+
   if (!data || !data.data || !data.data.children) {
     console.error('Reddit API error:', data);
     return null;
@@ -57,7 +58,7 @@ async function fetchMeme(subreddits = ['dankmemes', 'funny', 'memes']) {
   // Filter for posts that are safe, image posts, and supported formats
   const posts = data.data.children
     .map(post => post.data)
-    .filter(p => 
+    .filter(p =>
       !p.over_18 &&
       (p.post_hint === 'image' || p.url?.endsWith('.gif')) &&
       isSupportedImage(p.url)
