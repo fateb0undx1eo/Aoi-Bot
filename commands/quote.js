@@ -2,8 +2,7 @@ const { SlashCommandBuilder } = require('discord.js');
 const quoteManager = require('../utils/quoteManager');
 
 module.exports = {
-  name: 'quote',  // <-- Add this
-
+  name: 'quote',
   data: new SlashCommandBuilder()
     .setName('quote')
     .setDescription('Quote related commands')
@@ -40,11 +39,13 @@ module.exports = {
         return interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
       }
       await quoteManager.setQuoteChannel(interaction);
+
     } else if (sub === 'setinterval') {
       if (!interaction.member.permissions.has('ManageGuild')) {
         return interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
       }
       await quoteManager.setQuoteInterval(interaction);
+
     } else if (sub === 'get') {
       await quoteManager.sendQuote(interaction);
     }
@@ -58,15 +59,22 @@ module.exports = {
       if (!message.member.permissions.has('ManageGuild')) {
         return message.reply('You need Manage Server permission to use this.');
       }
+
       const channel = message.mentions.channels.first();
       if (!channel) {
         return message.reply('Please mention a channel.');
       }
+
       if (!quoteManager.guildConfigs) quoteManager.loadConfig();
-      if (!quoteManager.guildConfigs[message.guild.id]) quoteManager.guildConfigs[message.guild.id] = {};
+
+      if (!quoteManager.guildConfigs[message.guild.id]) {
+        quoteManager.guildConfigs[message.guild.id] = {};
+      }
+
       quoteManager.guildConfigs[message.guild.id].quoteChannelId = channel.id;
       quoteManager.saveConfig();
       quoteManager.startScheduler(client, message.guild.id);
+
       return message.reply(`Quote channel set to ${channel.name}`);
     }
 
@@ -74,15 +82,22 @@ module.exports = {
       if (!message.member.permissions.has('ManageGuild')) {
         return message.reply('You need Manage Server permission to use this.');
       }
+
       const num = Number(args[1]);
       if (isNaN(num) || num < 1) {
         return message.reply('Please provide a valid number of hours (at least 1).');
       }
+
       if (!quoteManager.guildConfigs) quoteManager.loadConfig();
-      if (!quoteManager.guildConfigs[message.guild.id]) quoteManager.guildConfigs[message.guild.id] = {};
+
+      if (!quoteManager.guildConfigs[message.guild.id]) {
+        quoteManager.guildConfigs[message.guild.id] = {};
+      }
+
       quoteManager.guildConfigs[message.guild.id].quoteIntervalHours = num;
       quoteManager.saveConfig();
       quoteManager.startScheduler(client, message.guild.id);
+
       return message.reply(`Quote interval set to every ${num} hour(s)`);
     }
 
