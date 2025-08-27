@@ -32,7 +32,6 @@ module.exports = {
       subcommand.setName('get').setDescription('Get a random anime quote now')
     ),
 
-  // Slash command handler
   async slashExecute(interaction) {
     const sub = interaction.options.getSubcommand();
     if (sub === 'setchannel') {
@@ -56,7 +55,6 @@ module.exports = {
     }
   },
 
-  // Prefix command handler
   async execute(message, client, args) {
     const sub = args[0]?.toLowerCase();
 
@@ -85,13 +83,10 @@ module.exports = {
       if (isNaN(num) || num < 1) {
         return message.reply('Please provide a valid number of hours (at least 1).');
       }
-
       if (!quoteManager.guildConfigs) quoteManager.loadConfig();
-
       if (!quoteManager.guildConfigs[message.guild.id]) {
         quoteManager.guildConfigs[message.guild.id] = {};
       }
-
       quoteManager.guildConfigs[message.guild.id].quoteIntervalHours = num;
       quoteManager.saveConfig();
       quoteManager.startScheduler(client, message.guild.id);
@@ -99,7 +94,6 @@ module.exports = {
     } else if (sub === 'get') {
       await quoteManager.sendQuote(message);
     } else {
-      // Default to sending a random quote
       await quoteManager.sendQuote(message);
     }
   },
