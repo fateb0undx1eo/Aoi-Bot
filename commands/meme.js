@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const fetchMeme = require('../utils/fetchMeme');
-const memeSubreddits = require('../../memesubreddits');
+const memeSubreddits = require('../memesubreddits');
 
 module.exports = {
   name: 'meme',
@@ -68,4 +68,5 @@ module.exports = {
     }
   }
 };
+
 
