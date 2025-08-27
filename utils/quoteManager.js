@@ -6,7 +6,6 @@ const configPath = path.resolve(__dirname, '../../guildConfig.json');
 
 let guildConfigs = {};
 
-// Load config from file (sync)
 function loadConfig() {
   try {
     if (fs.existsSync(configPath)) {
@@ -21,7 +20,6 @@ function loadConfig() {
   }
 }
 
-// Save config to file (sync)
 function saveConfig() {
   try {
     fs.writeFileSync(configPath, JSON.stringify(guildConfigs, null, 2));
@@ -30,7 +28,6 @@ function saveConfig() {
   }
 }
 
-// Anime quote APIs for fallback
 const quoteAPIs = [
   async () => {
     const res = await fetch('https://animechan.vercel.app/api/random');
@@ -46,7 +43,6 @@ const quoteAPIs = [
   },
 ];
 
-// Fetch a random quote with fallback
 async function fetchRandomQuote() {
   const shuffled = quoteAPIs.sort(() => Math.random() - 0.5);
   for (const apiFunc of shuffled) {
@@ -58,27 +54,26 @@ async function fetchRandomQuote() {
   return 'Sorry, could not fetch a quote at this time.';
 }
 
-// Timers for scheduled quote posting
 const timers = {};
+const nextQuotePostTimes = {};
 
-// Start scheduler per guild
 function startScheduler(client, guildId) {
-  // Clear existing timer if any
   if (timers[guildId]) clearInterval(timers[guildId]);
 
   const config = guildConfigs[guildId];
   if (!config || !config.quoteChannelId || !config.quoteIntervalHours) return;
 
   const intervalMs = config.quoteIntervalHours * 60 * 60 * 1000;
+  nextQuotePostTimes[guildId] = Date.now();
 
-  // Initial immediate post
   postQuote(client, guildId);
 
-  // Schedule repeated posts
-  timers[guildId] = setInterval(() => postQuote(client, guildId), intervalMs);
+  timers[guildId] = setInterval(() => {
+    postQuote(client, guildId);
+    nextQuotePostTimes[guildId] = Date.now() + intervalMs;
+  }, intervalMs);
 }
 
-// Post quote message to channel
 async function postQuote(client, guildId) {
   try {
     const config = guildConfigs[guildId];
@@ -92,7 +87,12 @@ async function postQuote(client, guildId) {
   }
 }
 
-// Admin command handlers
+function getNextQuoteIn(guildId) {
+  if (!nextQuotePostTimes[guildId]) return null;
+  const diffMs = nextQuotePostTimes[guildId] - Date.now();
+  return diffMs > 0 ? Math.floor(diffMs / 1000) : 0;
+}
+
 async function setQuoteChannel(interaction) {
   if (!interaction.member.permissions.has('ManageGuild')) {
     return interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
@@ -124,10 +124,9 @@ async function setQuoteInterval(interaction) {
 
 async function sendQuote(interactionOrMessage) {
   const quote = await fetchRandomQuote();
-
-  if (interactionOrMessage.reply) { // Slash command or interaction
+  if (interactionOrMessage.reply) {
     await interactionOrMessage.reply(quote);
-  } else if (interactionOrMessage.channel) { // Message-based prefix command
+  } else if (interactionOrMessage.channel) {
     await interactionOrMessage.channel.send(quote);
   }
 }
@@ -137,6 +136,7 @@ module.exports = {
   loadConfig,
   saveConfig,
   startScheduler,
+  getNextQuoteIn,
   setQuoteChannel,
   setQuoteInterval,
   sendQuote,
