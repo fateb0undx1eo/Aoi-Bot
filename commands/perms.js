@@ -1,95 +1,153 @@
-const { SlashCommandBuilder, PermissionFlagsBits, ActionRowBuilder, StringSelectMenuBuilder } = require('discord.js');
+const { MessageActionRow, MessageSelectMenu, Permissions } = require('discord.js');
 
 const PERMISSIONS = [
-  { label: "View Channel", value: "ViewChannel" },
-  { label: "Send Messages", value: "SendMessages" },
-  { label: "Embed Links", value: "EmbedLinks" },
-  { label: "Attach Files", value: "AttachFiles" },
-  { label: "Manage Messages", value: "ManageMessages" },
-  { label: "Mention Everyone", value: "MentionEveryone" },
-  { label: "Read Message History", value: "ReadMessageHistory" },
-  { label: "Use External Emojis", value: "UseExternalEmojis" },
-  { label: "Add Reactions", value: "AddReactions" },
-  { label: "Speak", value: "Speak" },
-  { label: "Connect", value: "Connect" },
-  { label: "Deafen Members", value: "DeafenMembers" },
-  { label: "Mute Members", value: "MuteMembers" },
-  { label: "Move Members", value: "MoveMembers" },
-  { label: "Manage Channels", value: "ManageChannels" },
-  { label: "Manage Roles", value: "ManageRoles" },
-  { label: "Manage Webhooks", value: "ManageWebhooks" },
-  { label: "Create Instant Invite", value: "CreateInstantInvite" },
-  // More permissions can be added here.
+  { label: "View Channel", value: "VIEW_CHANNEL" },
+  { label: "Send Messages", value: "SEND_MESSAGES" },
+  { label: "Embed Links", value: "EMBED_LINKS" },
+  { label: "Attach Files", value: "ATTACH_FILES" },
+  { label: "Manage Messages", value: "MANAGE_MESSAGES" },
+  { label: "Mention Everyone", value: "MENTION_EVERYONE" },
+  { label: "Read Message History", value: "READ_MESSAGE_HISTORY" },
+  { label: "Use External Emojis", value: "USE_EXTERNAL_EMOJIS" },
+  { label: "Add Reactions", value: "ADD_REACTIONS" },
+  { label: "Speak", value: "SPEAK" },
+  { label: "Connect", value: "CONNECT" },
+  { label: "Deafen Members", value: "DEAFEN_MEMBERS" },
+  { label: "Mute Members", value: "MUTE_MEMBERS" },
+  { label: "Move Members", value: "MOVE_MEMBERS" },
+  { label: "Manage Channels", value: "MANAGE_CHANNELS" },
+  { label: "Manage Roles", value: "MANAGE_ROLES" },
+  { label: "Manage Webhooks", value: "MANAGE_WEBHOOKS" },
+  { label: "Create Instant Invite", value: "CREATE_INSTANT_INVITE" },
 ];
 
 module.exports = {
-  name: 'perms',  // Important for your command loader
-  data: new SlashCommandBuilder()
-    .setName('perms')
-    .setDescription('Manage permissions for a member or role')
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('member')
-        .setDescription('Set permissions for a member')
-        .addUserOption(option => option.setName('target').setDescription('Select member').setRequired(true))
-    )
-    .addSubcommand(subcommand =>
-      subcommand
-        .setName('role')
-        .setDescription('Set permissions for a role')
-        .addRoleOption(option => option.setName('target').setDescription('Select role').setRequired(true))
-    ),
+  name: 'perms',
+  description: 'Assign permissions interactively to a member or role',
+  async execute(message, client, args) {
+    // 1. Ask user to choose between member or role
+    const typeSelect = new MessageSelectMenu()
+      .setCustomId('select-type')
+      .setPlaceholder('Choose Member or Role')
+      .addOptions([
+        { label: 'Member', value: 'member' },
+        { label: 'Role', value: 'role' },
+      ]);
 
-  async execute(interaction) {
-    const subcommand = interaction.options.getSubcommand();
-    const targetUser = interaction.options.getUser('target');
-    const targetRole = interaction.options.getRole('target');
+    const typeRow = new MessageActionRow().addComponents(typeSelect);
 
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('select-permissions')
-      .setPlaceholder('Select permissions to assign')
-      .setMinValues(1)
-      .setMaxValues(PERMISSIONS.length)
-      .addOptions(PERMISSIONS);
+    const promptMsg = await message.channel.send({ content: 'Select to assign permissions to a Member or Role:', components: [typeRow] });
 
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const filter = i => i.user.id === message.author.id && i.customId === 'select-type';
+    const collector = promptMsg.createMessageComponentCollector({ filter, max: 1, time: 60000 });
 
-    // Store temporary target for interaction collector
-    interaction.client.tempPermTargets = interaction.client.tempPermTargets || new Map();
-    interaction.client.tempPermTargets.set(interaction.user.id, { subcommand, targetUser, targetRole });
+    collector.on('collect', async interaction => {
+      await interaction.deferUpdate();
+      const selectedType = interaction.values[0];
 
-    await interaction.reply({ content: `Select permissions to assign to ${subcommand === 'member' ? targetUser.tag : targetRole.name}:`, components: [row], ephemeral: true });
+      if (selectedType === 'member') {
+        // Ask user to mention a member
+        await message.channel.send('Please mention the member you want to assign permissions to (e.g. @User):');
 
-    const filter = i => i.customId === 'select-permissions' && i.user.id === interaction.user.id;
-    const collector = interaction.channel.createMessageComponentCollector({ filter, time: 60000, max: 1 });
+        // Wait for message reply (mention)
+        const mentionFilter = m => m.author.id === message.author.id && m.mentions.members.size > 0;
+        const mentionCollected = await message.channel.awaitMessages({ filter: mentionFilter, max: 1, time: 60000, errors: ['time'] }).catch(() => null);
 
-    collector.on('collect', async i => {
-      const selectedPerms = i.values;
-      const permsToSet = {};
-      for (const perm of selectedPerms) {
-        const flag = PermissionFlagsBits[perm];
-        if (flag) {
-          permsToSet[flag] = true;
+        if (!mentionCollected) {
+          return message.channel.send('Timed out or invalid member mention. Canceling.');
         }
+
+        const member = mentionCollected.first().mentions.members.first();
+
+        if (!member) {
+          return message.channel.send('Could not find the member. Canceling.');
+        }
+
+        showPermissionSelector(message, member);
+
+      } else if (selectedType === 'role') {
+        // Show role select menu with server roles
+        const roleOptions = message.guild.roles.cache
+          .filter(r => r.id !== message.guild.id)
+          .map(r => ({ label: r.name, value: r.id }))
+          .slice(0, 25); // Max 25 options in select menu
+
+        if (roleOptions.length === 0) {
+          return message.channel.send('No roles available to choose.');
+        }
+
+        const roleSelect = new MessageSelectMenu()
+          .setCustomId('select-role')
+          .setPlaceholder('Select a role to assign permissions')
+          .addOptions(roleOptions);
+
+        const roleRow = new MessageActionRow().addComponents(roleSelect);
+
+        const rolePrompt = await message.channel.send({ content: 'Select a role:', components: [roleRow] });
+
+        const roleFilter = i => i.user.id === message.author.id && i.customId === 'select-role';
+        const roleCollector = rolePrompt.createMessageComponentCollector({ filter: roleFilter, max: 1, time: 60000 });
+
+        roleCollector.on('collect', async roleInteraction => {
+          await roleInteraction.deferUpdate();
+          const roleId = roleInteraction.values[0];
+          const role = message.guild.roles.cache.get(roleId);
+          if (!role) {
+            return message.channel.send('Role not found. Canceling.');
+          }
+          showPermissionSelector(message, role);
+        });
+
+        roleCollector.on('end', collected => {
+          if (collected.size === 0) {
+            message.channel.send('Role selection timed out. Canceling.');
+          }
+        });
       }
-
-      const overwriteTarget = subcommand === 'member' ? targetUser : targetRole;
-
-      try {
-        await interaction.channel.permissionOverwrites.edit(overwriteTarget, permsToSet);
-        await i.update({ content: `Permissions updated for ${overwriteTarget.tag || overwriteTarget.name}.`, components: [] });
-      } catch (error) {
-        await i.update({ content: `Failed to update permissions: ${error.message}`, components: [] });
-      }
-
-      interaction.client.tempPermTargets.delete(interaction.user.id);
     });
 
     collector.on('end', collected => {
       if (collected.size === 0) {
-        interaction.editReply({ content: 'Permission selection timed out.', components: [] });
-        interaction.client.tempPermTargets.delete(interaction.user.id);
+        message.channel.send('Selection timed out. Canceling.');
       }
     });
-  },
+
+    // Shows permission select menu for chosen member or role
+    async function showPermissionSelector(message, target) {
+      const permissionSelect = new MessageSelectMenu()
+        .setCustomId('select-permissions')
+        .setPlaceholder('Select permissions to assign')
+        .setMinValues(1)
+        .setMaxValues(Math.min(PERMISSIONS.length, 25))
+        .addOptions(PERMISSIONS);
+
+      const permissionRow = new MessageActionRow().addComponents(permissionSelect);
+
+      const permPrompt = await message.channel.send({ content: `Select permissions to assign to ${target.name || target.user.tag}:`, components: [permissionRow] });
+
+      const permFilter = i => i.user.id === message.author.id && i.customId === 'select-permissions';
+      const permCollector = permPrompt.createMessageComponentCollector({ filter: permFilter, max: 1, time: 60000 });
+
+      permCollector.on('collect', async i => {
+        await i.deferUpdate();
+        const selectedPerms = i.values;
+        const permsToSet = new Permissions();
+
+        for (const perm of selectedPerms) {
+          permsToSet.add(Permissions.FLAGS[perm]);
+        }
+
+        try {
+          await message.channel.permissionOverwrites.edit(target, { allow: permsToSet });
+          message.channel.send(`Permissions updated for ${target.name || target.user.tag}.`);
+        } catch (error) {
+          message.channel.send(`Failed to update permissions: ${error.message}`);
+        }
+      });
+
+      permCollector.on('end', collected => {
+        if (collected.size === 0) message.channel.send('Permission selection timed out. Canceling.');
+      });
+    }
+  }
 };
