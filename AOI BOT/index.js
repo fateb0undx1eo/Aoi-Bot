@@ -7,10 +7,12 @@ const quoteManager = require('./utils/quoteManager'); // Import quoteManager
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const PREFIX = 's!';
+
 // ---------- PATCH: global rejection handler ----------
 process.on('unhandledRejection', err => {
   console.error('[Unhandled Rejection]', err);
 });
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -20,7 +22,9 @@ const client = new Client({
   ],
   partials: [Partials.Channel]
 });
+
 client.commands = new Collection();
+
 // ---------- PATCH: smarter command loader ----------
 function loadCommands(dirPath = path.join(__dirname, 'commands')) {
   const files = fs.readdirSync(dirPath);
@@ -42,6 +46,7 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
   }
 }
 loadCommands();
+
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
   startAutoPoster(client, MEME_CHANNEL_ID);
@@ -59,6 +64,78 @@ client.once('ready', () => {
   // ---------- PATCH: simple presence ----------
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
+
+// --------- Advanced Cache Cleaner ---------
+
+// Cache registry: add your caches here when creating / updating caches
+client.caches = new Map();
+
+/**
+ * Register a cache at runtime to be auto trimmed
+ * @param {string} key - Unique cache name
+ * @param {Array} cacheArray - The cache array reference
+ * @param {number} maxSize - Maximum allowed cache size
+ */
+client.registerCache = function (key, cacheArray, maxSize = 50) {
+  if (!Array.isArray(cacheArray)) {
+    console.warn(`[CacheCleaner] Can't register cache '${key}': Not an array.`);
+    return;
+  }
+  this.caches.set(key, { cacheArray, maxSize });
+  console.log(`[CacheCleaner] Registered cache '${key}' with max size ${maxSize}.`);
+};
+
+/**
+ * Trim a single cache array to maxSize, removing oldest entries (start of array)
+ * @param {Array} cacheArray 
+ * @param {number} maxSize 
+ * @returns {number} Number of removed entries
+ */
+function trimCache(cacheArray, maxSize) {
+  let removedCount = 0;
+  while (cacheArray.length > maxSize) {
+    cacheArray.shift();
+    removedCount++;
+  }
+  return removedCount;
+}
+
+// Periodic cache cleaning function
+function performCacheCleaning() {
+  console.log('[CacheCleaner] Starting cache cleanup...');
+  let totalRemoved = 0;
+
+  for (const [key, { cacheArray, maxSize }] of client.caches.entries()) {
+    if (!cacheArray || !Array.isArray(cacheArray)) {
+      console.warn(`[CacheCleaner] Cache '${key}' is not an array or invalid.`);
+      continue;
+    }
+    const beforeSize = cacheArray.length;
+    const removed = trimCache(cacheArray, maxSize);
+    const afterSize = cacheArray.length;
+    totalRemoved += removed;
+    if (removed > 0) {
+      console.log(`[CacheCleaner] Trimmed cache '${key}' from ${beforeSize} to ${afterSize} (removed ${removed})`);
+    }
+  }
+
+  console.log(`[CacheCleaner] Cache cleanup completed. Total entries removed: ${totalRemoved}`);
+}
+
+// Start periodic cache cleaner task (every hour)
+setInterval(performCacheCleaning, 60 * 60 * 1000);
+
+// --------- Example: Register initial meme and quote caches (replace these with your actual caches) ---------
+
+// Example caches — replace or link to your actual meme/quote caches in your bot
+client.memeCache = [];  // Your meme cache array reference here
+client.quoteCache = []; // Your quote cache array reference here
+
+client.registerCache('memeCache', client.memeCache, 50);
+client.registerCache('quoteCache', client.quoteCache, 50);
+
+// -----------------------------------------------------
+
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const command = client.commands.get(interaction.commandName);
@@ -74,6 +151,7 @@ client.on('interactionCreate', async interaction => {
       : interaction.reply(reply);
   }
 });
+
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
@@ -87,4 +165,5 @@ client.on('messageCreate', async message => {
     message.reply('There was an error executing this command!');
   }
 });
+
 client.login(TOKEN);
