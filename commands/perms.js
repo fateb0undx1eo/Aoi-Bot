@@ -1,7 +1,10 @@
 const {
   ActionRowBuilder,
   StringSelectMenuBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   PermissionsBitField,
+  ComponentType,
 } = require('discord.js');
 
 const PERMISSIONS = [
@@ -24,10 +27,11 @@ const PERMISSIONS = [
   { label: "Manage Webhooks", value: "ManageWebhooks" },
   { label: "Create Instant Invite", value: "CreateInstantInvite" },
 ];
+const CHANNELS_PER_PAGE = 25;
 
 module.exports = {
   name: "perms",
-  description: "Assign channel-specific permissions to a member or role with pre-selection and toggling",
+  description: "Assign channel-specific permissions to a member or role, with pagination and toggle.",
 
   async execute(message, client, args) {
     // Step 1: Choose member or role
@@ -39,42 +43,36 @@ module.exports = {
         { label: "Role", value: "role" },
       ]);
     const typeRow = new ActionRowBuilder().addComponents(typeSelect);
+
     const promptMsg = await message.channel.send({
       content: "Select to assign permissions to a Member or Role:",
       components: [typeRow],
     });
-    const filter = (i) =>
-      i.user.id === message.author.id && i.customId === "select-type";
+
+    const filter = (i) => i.user.id === message.author.id && i.customId === "select-type";
+
     const collector = promptMsg.createMessageComponentCollector({
       filter,
       max: 1,
       time: 60000,
     });
+
     collector.on("collect", async (interaction) => {
       await interaction.deferUpdate();
       promptMsg.delete().catch(() => {});
       const selectedType = interaction.values[0];
       if (selectedType === "member") {
-        await message.channel.send(
-          "Please mention the member you want to assign permissions to (e.g. @User):"
-        );
-        const mentionFilter = (m) =>
-          m.author.id === message.author.id && m.mentions.members.size > 0;
+        await message.channel.send("Please mention the member you want to assign permissions to (`@User`):");
+        const mentionFilter = (m) => m.author.id === message.author.id && m.mentions.members.size > 0;
         const mentionCollected = await message.channel
-          .awaitMessages({
-            filter: mentionFilter,
-            max: 1,
-            time: 60000,
-            errors: ["time"],
-          })
+          .awaitMessages({ filter: mentionFilter, max: 1, time: 60000, errors: ["time"] })
           .catch(() => null);
-        if (!mentionCollected)
-          return message.channel.send("Timed out or invalid member mention.");
+        if (!mentionCollected) return message.channel.send("❌ Timed out or invalid member mention.");
         const member = mentionCollected.first().mentions.members.first();
-        if (!member) return message.channel.send("Could not find the member.");
-        selectChannelsAndPermissions(message, member);
+        if (!member) return message.channel.send("❌ Could not find the member.");
+        await paginateChannels(message, member);
       } else {
-        // Role select dropdown
+        // Role select
         const sortedRoles = message.guild.roles.cache
           .filter((r) => r.id !== message.guild.id)
           .sort((a, b) => a.position - b.position);
@@ -83,7 +81,7 @@ module.exports = {
           value: r.id,
         })).slice(0, 25);
         if (!roleOptions.length)
-          return message.channel.send("No roles available to select.");
+          return message.channel.send("No roles available.");
         const roleSelect = new StringSelectMenuBuilder()
           .setCustomId("select-role")
           .setPlaceholder("Select a role to assign permissions")
@@ -93,8 +91,7 @@ module.exports = {
           content: "Select a role:",
           components: [roleRow],
         });
-        const roleFilter = (i) =>
-          i.user.id === message.author.id && i.customId === "select-role";
+        const roleFilter = (i) => i.user.id === message.author.id && i.customId === "select-role";
         const roleCollector = rolePrompt.createMessageComponentCollector({
           filter: roleFilter,
           max: 1,
@@ -104,8 +101,8 @@ module.exports = {
           await roleInteraction.deferUpdate();
           rolePrompt.delete().catch(() => {});
           const role = message.guild.roles.cache.get(roleInteraction.values[0]);
-          if (!role) return message.channel.send("Role not found.");
-          selectChannelsAndPermissions(message, role);
+          if (!role) return message.channel.send("No such role found.");
+          await paginateChannels(message, role);
         });
         roleCollector.on("end", (collected) => {
           if (collected.size === 0)
@@ -113,147 +110,142 @@ module.exports = {
         });
       }
     });
+
     collector.on("end", (collected) => {
       if (collected.size === 0) message.channel.send("Selection timed out.");
     });
 
-    async function selectChannelsAndPermissions(message, target) {
-      // Sorted channels by rawPosition ascending
+    // Paginated channel selection
+    async function paginateChannels(message, target) {
       const sortedChannels = message.guild.channels.cache
         .filter((c) => c.isTextBased())
-        .sort((a, b) => a.rawPosition - b.rawPosition);
+        .sort((a, b) => a.rawPosition - b.rawPosition)
+        .map((c) => ({ label: c.name, value: c.id }));
 
-      const channelOptions = sortedChannels
-        .map((c) => ({ label: c.name, value: c.id }))
-        .slice(0, 25);
+      let page = 0;
+      let channelsOnThisPage = sortedChannels.slice(page * CHANNELS_PER_PAGE, (page + 1) * CHANNELS_PER_PAGE);
 
-      if (!channelOptions.length)
-        return message.channel.send("No text channels available.");
-
-      const channelSelect = new StringSelectMenuBuilder()
-        .setCustomId("select-channels")
-        .setPlaceholder("Select one or more channels")
-        .setMinValues(1)
-        .setMaxValues(channelOptions.length)
-        .addOptions(channelOptions);
-
-      const channelRow = new ActionRowBuilder().addComponents(channelSelect);
-
-      const channelMsg = await message.channel.send({
-        content: `Select channels where you want to assign permissions for ${
-          target.name || target.user?.tag
-        }:`,
-        components: [channelRow],
-      });
-
-      const channelFilter = (i) =>
-        i.user.id === message.author.id && i.customId === "select-channels";
-      const channelCollector = channelMsg.createMessageComponentCollector({
-        filter: channelFilter,
-        max: 1,
-        time: 60000,
-      });
-
-      channelCollector.on("collect", async (channelInteraction) => {
-        await channelInteraction.deferUpdate();
-        channelMsg.delete().catch(() => {});
-
-        const selectedChannels = channelInteraction.values;
-
-        // Get pre-selected permissions from first selected channel, if exists
-        let preSelected = [];
-        const firstChannel = message.guild.channels.cache.get(selectedChannels[0]);
-        if (firstChannel) {
-          const overwrite = firstChannel.permissionOverwrites.cache.get(
-            target.id ?? target.roleId
-          );
-          const allowed = overwrite ? overwrite.allow : null;
-          if (allowed) {
-            const allowedArr = allowed.toArray();
-            preSelected = PERMISSIONS.filter((p) =>
-              allowedArr.includes(PermissionsBitField.Flags[p.value])
-            ).map((p) => p.value);
-          }
-        }
-
-        // Prepare permission options with default selected
-        const permOptions = PERMISSIONS.map((p) => ({
-          label: p.label,
-          value: p.value,
-          default: preSelected.includes(p.value),
-        }));
-
-        const permSelect = new StringSelectMenuBuilder()
-          .setCustomId("select-permissions")
-          .setPlaceholder("Select permissions to assign (unselected will be removed)")
+      async function sendPage() {
+        const channelSelect = new StringSelectMenuBuilder()
+          .setCustomId("select-channels")
+          .setPlaceholder("Select a channel")
           .setMinValues(1)
-          .setMaxValues(Math.min(permOptions.length, 25))
-          .addOptions(permOptions);
+          .setMaxValues(1)
+          .addOptions(channelsOnThisPage);
 
-        const permRow = new ActionRowBuilder().addComponents(permSelect);
+        const buttons = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId("prev_page")
+            .setLabel("Previous")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === 0),
+          new ButtonBuilder()
+            .setCustomId("next_page")
+            .setLabel("Next")
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled((page + 1) * CHANNELS_PER_PAGE >= sortedChannels.length)
+        );
 
-        const permMsg = await message.channel.send({
-          content: `Select permissions for ${
-            target.name || target.user?.tag
-          } in ${selectedChannels.length} channel(s):`,
-          components: [permRow],
+        const channelMsg = await message.channel.send({
+          content: `Select a channel where you want to assign permissions for ${target.name || target.user?.tag} (Page ${page + 1}/${Math.ceil(sortedChannels.length / CHANNELS_PER_PAGE)})`,
+          components: [new ActionRowBuilder().addComponents(channelSelect), buttons],
         });
 
-        const permFilter = (i) =>
-          i.user.id === message.author.id && i.customId === "select-permissions";
-        const permCollector = permMsg.createMessageComponentCollector({
-          filter: permFilter,
+        // Only you can interact
+        const channelFilter = (i) =>
+          i.user.id === message.author.id && ["select-channels", "next_page", "prev_page"].includes(i.customId);
+
+        const channelCollector = channelMsg.createMessageComponentCollector({
+          filter: channelFilter,
           max: 1,
           time: 60000,
         });
 
-        permCollector.on("collect", async (permInteraction) => {
-          await permInteraction.deferUpdate();
-          permMsg.delete().catch(() => {});
-
-          const selectedPerms = permInteraction.values;
-
-          // Build perms to allow and deny
-          const allPermsFlags = PERMISSIONS.map((p) => PermissionsBitField.Flags[p.value]);
-          const selectedFlags = selectedPerms.map((p) => PermissionsBitField.Flags[p]);
-
-          const allowPerms = new PermissionsBitField(selectedFlags);
-          const denyPerms = new PermissionsBitField(allPermsFlags).remove(selectedFlags);
-
-          let successCount = 0;
-          let failCount = 0;
-
-          for (const chanId of selectedChannels) {
-            const channel = message.guild.channels.cache.get(chanId);
-            if (!channel || !channel.isTextBased()) continue;
-
-            try {
-              await channel.permissionOverwrites.edit(target, {
-                allow: allowPerms,
-                deny: denyPerms,
-              });
-              successCount++;
-            } catch {
-              failCount++;
-            }
+        channelCollector.on("collect", async (channelInteraction) => {
+          await channelInteraction.deferUpdate();
+          if (channelInteraction.customId === "next_page") {
+            page++;
+            channelsOnThisPage = sortedChannels.slice(page * CHANNELS_PER_PAGE, (page + 1) * CHANNELS_PER_PAGE);
+            channelMsg.delete().catch(() => {});
+            await sendPage();
+          } else if (channelInteraction.customId === "prev_page") {
+            page--;
+            channelsOnThisPage = sortedChannels.slice(page * CHANNELS_PER_PAGE, (page + 1) * CHANNELS_PER_PAGE);
+            channelMsg.delete().catch(() => {});
+            await sendPage();
+          } else if (channelInteraction.customId === "select-channels") {
+            channelMsg.delete().catch(() => {});
+            const selectedChannelId = channelInteraction.values[0];
+            const channel = message.guild.channels.cache.get(selectedChannelId);
+            await selectPermissions(message, target, channel);
           }
-
-          await message.channel.send(
-            `Updated permissions in ${successCount} channel(s)` +
-              (failCount ? `, failed in ${failCount} channel(s)` : "") +
-              ` for ${target.name || target.user?.tag}.`
-          );
         });
 
-        permCollector.on("end", (collected) => {
-          if (collected.size === 0)
-            message.channel.send("Permission selection timed out.");
+        channelCollector.on("end", (collected) => {
+          if (collected.size === 0) channelMsg.delete().catch(() => {});
         });
+      }
+
+      await sendPage();
+    }
+
+    // Permissions picker, pre-selects/toggles based on channel overwrite
+    async function selectPermissions(message, target, channel) {
+      const overwrite = channel.permissionOverwrites.cache.get(target.id ?? target.roleId);
+      const currentAllowArr = overwrite ? overwrite.allow.toArray() : [];
+      const permOptions = PERMISSIONS.map((p) => ({
+        label: p.label,
+        value: p.value,
+        default: currentAllowArr.includes(PermissionsBitField.Flags[p.value]),
+      }));
+
+      const permSelect = new StringSelectMenuBuilder()
+        .setCustomId("select-permissions")
+        .setPlaceholder("Tick=allow, untick=remove")
+        .setMinValues(0)
+        .setMaxValues(Math.min(permOptions.length, 25))
+        .addOptions(permOptions);
+
+      const permRow = new ActionRowBuilder().addComponents(permSelect);
+
+      const permMsg = await message.channel.send({
+        content: `Select permissions for ${target.name || target.user?.tag} in <#${channel.id}> (tick to allow, untick to remove):`,
+        components: [permRow],
       });
 
-      channelCollector.on("end", (collected) => {
-        if (collected.size === 0)
-          message.channel.send("Channel selection timed out.");
+      const permFilter = (i) => i.user.id === message.author.id && i.customId === "select-permissions";
+      const permCollector = permMsg.createMessageComponentCollector({
+        filter: permFilter,
+        max: 1,
+        time: 60000,
+      });
+
+      permCollector.on("collect", async (permInteraction) => {
+        await permInteraction.deferUpdate();
+        permMsg.delete().catch(() => {});
+        const selectedPerms = permInteraction.values;
+        const allPermFlags = PERMISSIONS.map((p) => PermissionsBitField.Flags[p.value]);
+        const allow = selectedPerms.map((k) => PermissionsBitField.Flags[k]);
+        const deny = allPermFlags.filter(
+          (k) => !allow.includes(k) && currentAllowArr.includes(k)
+        );
+
+        try {
+          // Remove denied perms from allow
+          await channel.permissionOverwrites.edit(target, {
+            allow: allow,
+            deny: [], // can add to deny to force deny, but here just remove from allow, so permissions are inherited
+          });
+          await message.channel.send(
+            `✅ Updated permissions for ${target.name || target.user?.tag} in <#${channel.id}>.\nAllowed: ${selectedPerms.length ? selectedPerms.join(", ") : "none"}`
+          );
+        } catch (error) {
+          await message.channel.send(`❌ Failed to update permissions: ${error.message}`);
+        }
+      });
+
+      permCollector.on("end", (collected) => {
+        if (collected.size === 0) permMsg.delete().catch(() => {});
       });
     }
   },
