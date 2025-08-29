@@ -31,10 +31,9 @@ const CHANNELS_PER_PAGE = 25;
 
 module.exports = {
   name: "perms",
-  description: "Assign channel-specific permissions to a member or role, with pagination and toggle.",
+  description: "Assign channel-specific permissions to a member or role, with pagination and explicit allow/deny.",
 
   async execute(message, client, args) {
-    // Step 1: Choose member or role
     const typeSelect = new StringSelectMenuBuilder()
       .setCustomId("select-type")
       .setPlaceholder("Choose Member or Role")
@@ -49,7 +48,8 @@ module.exports = {
       components: [typeRow],
     });
 
-    const filter = (i) => i.user.id === message.author.id && i.customId === "select-type";
+    const filter = (i) =>
+      i.user.id === message.author.id && i.customId === "select-type";
 
     const collector = promptMsg.createMessageComponentCollector({
       filter,
@@ -72,7 +72,6 @@ module.exports = {
         if (!member) return message.channel.send("❌ Could not find the member.");
         await paginateChannels(message, member);
       } else {
-        // Role select
         const sortedRoles = message.guild.roles.cache
           .filter((r) => r.id !== message.guild.id)
           .sort((a, b) => a.position - b.position);
@@ -115,7 +114,6 @@ module.exports = {
       if (collected.size === 0) message.channel.send("Selection timed out.");
     });
 
-    // Paginated channel selection
     async function paginateChannels(message, target) {
       const sortedChannels = message.guild.channels.cache
         .filter((c) => c.isTextBased())
@@ -151,7 +149,6 @@ module.exports = {
           components: [new ActionRowBuilder().addComponents(channelSelect), buttons],
         });
 
-        // Only you can interact
         const channelFilter = (i) =>
           i.user.id === message.author.id && ["select-channels", "next_page", "prev_page"].includes(i.customId);
 
@@ -189,7 +186,6 @@ module.exports = {
       await sendPage();
     }
 
-    // Permissions picker, pre-selects/toggles based on channel overwrite
     async function selectPermissions(message, target, channel) {
       const overwrite = channel.permissionOverwrites.cache.get(target.id ?? target.roleId);
       const currentAllowArr = overwrite ? overwrite.allow.toArray() : [];
@@ -201,7 +197,7 @@ module.exports = {
 
       const permSelect = new StringSelectMenuBuilder()
         .setCustomId("select-permissions")
-        .setPlaceholder("Tick=allow, untick=remove")
+        .setPlaceholder("Tick = allow, untick = deny (red X)")
         .setMinValues(0)
         .setMaxValues(Math.min(permOptions.length, 25))
         .addOptions(permOptions);
@@ -209,7 +205,7 @@ module.exports = {
       const permRow = new ActionRowBuilder().addComponents(permSelect);
 
       const permMsg = await message.channel.send({
-        content: `Select permissions for ${target.name || target.user?.tag} in <#${channel.id}> (tick to allow, untick to remove):`,
+        content: `Select permissions for ${target.name || target.user?.tag} in <#${channel.id}> (tick to allow, untick = deny/red X):`,
         components: [permRow],
       });
 
@@ -226,18 +222,14 @@ module.exports = {
         const selectedPerms = permInteraction.values;
         const allPermFlags = PERMISSIONS.map((p) => PermissionsBitField.Flags[p.value]);
         const allow = selectedPerms.map((k) => PermissionsBitField.Flags[k]);
-        const deny = allPermFlags.filter(
-          (k) => !allow.includes(k) && currentAllowArr.includes(k)
-        );
-
+        const deny = allPermFlags.filter((k) => !allow.includes(k));
         try {
-          // Remove denied perms from allow
           await channel.permissionOverwrites.edit(target, {
             allow: allow,
-            deny: [], // can add to deny to force deny, but here just remove from allow, so permissions are inherited
+            deny: deny,
           });
           await message.channel.send(
-            `✅ Updated permissions for ${target.name || target.user?.tag} in <#${channel.id}>.\nAllowed: ${selectedPerms.length ? selectedPerms.join(", ") : "none"}`
+            `✅ Updated permissions for ${target.name || target.user?.tag} in <#${channel.id}>.`
           );
         } catch (error) {
           await message.channel.send(`❌ Failed to update permissions: ${error.message}`);
