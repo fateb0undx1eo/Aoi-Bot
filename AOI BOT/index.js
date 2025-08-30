@@ -1,3 +1,4 @@
+// index.js
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
@@ -10,10 +11,8 @@ const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const PREFIX = 's!';
 
-// ---------- PATCH: global rejection handler ----------
-process.on('unhandledRejection', err => {
-  console.error('[Unhandled Rejection]', err);
-});
+// ---------- Global rejection handler ----------
+process.on('unhandledRejection', err => console.error('[Unhandled Rejection]', err));
 
 const client = new Client({
   intents: [
@@ -27,7 +26,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// ---------- PATCH: smarter command loader ----------
+// ---------- Command Loader ----------
 function loadCommands(dirPath = path.join(__dirname, 'commands')) {
   const files = fs.readdirSync(dirPath);
   for (const file of files) {
@@ -49,35 +48,28 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
 }
 loadCommands();
 
+// ---------- Ready Event ----------
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
   startAutoPoster(client, MEME_CHANNEL_ID);
 
-  // Load guild quote config and start quote scheduler
   quoteManager.loadConfig();
   for (const guildId of Object.keys(quoteManager.guildConfigs)) {
     const config = quoteManager.guildConfigs[guildId];
     if (config && config.quoteChannelId && config.quoteIntervalHours) {
       console.log(`Starting quote scheduler for guild ${guildId} with interval ${config.quoteIntervalHours} hour(s).`);
       quoteManager.startScheduler(client, guildId);
-    } else {
-      console.log(`Skipping quote scheduler for guild ${guildId} due to missing config.`);
     }
   }
 
-  // ---------- PATCH: simple presence ----------
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
 
-// --------- Advanced Cache Cleaner ---------
+// ---------- Cache Cleaner ----------
 client.caches = new Map();
 client.registerCache = function (key, cacheArray, maxSize = 50) {
-  if (!Array.isArray(cacheArray)) {
-    console.warn(`[CacheCleaner] Can't register cache '${key}': Not an array.`);
-    return;
-  }
+  if (!Array.isArray(cacheArray)) return console.warn(`[CacheCleaner] Can't register cache '${key}': Not an array.`);
   this.caches.set(key, { cacheArray, maxSize });
-  console.log(`[CacheCleaner] Registered cache '${key}' with max size ${maxSize}.`);
 };
 function trimCache(cacheArray, maxSize) {
   let removedCount = 0;
@@ -88,32 +80,24 @@ function trimCache(cacheArray, maxSize) {
   return removedCount;
 }
 function performCacheCleaning() {
-  console.log('[CacheCleaner] Starting cache cleanup...');
   let totalRemoved = 0;
   for (const [key, { cacheArray, maxSize }] of client.caches.entries()) {
-    if (!cacheArray || !Array.isArray(cacheArray)) {
-      console.warn(`[CacheCleaner] Cache '${key}' is not an array or invalid.`);
-      continue;
-    }
-    const beforeSize = cacheArray.length;
+    if (!Array.isArray(cacheArray)) continue;
     const removed = trimCache(cacheArray, maxSize);
-    const afterSize = cacheArray.length;
     totalRemoved += removed;
-    if (removed > 0) {
-      console.log(`[CacheCleaner] Trimmed cache '${key}' from ${beforeSize} to ${afterSize} (removed ${removed})`);
-    }
+    if (removed > 0) console.log(`[CacheCleaner] Trimmed '${key}' by ${removed} entries.`);
   }
-  console.log(`[CacheCleaner] Cache cleanup completed. Total entries removed: ${totalRemoved}`);
+  if (totalRemoved > 0) console.log(`[CacheCleaner] Total entries removed: ${totalRemoved}`);
 }
 setInterval(performCacheCleaning, 60 * 60 * 1000);
 
-// Example caches — replace or link with actual caches in your bot
+// Example caches
 client.memeCache = [];
 client.quoteCache = [];
 client.registerCache('memeCache', client.memeCache, 50);
 client.registerCache('quoteCache', client.quoteCache, 50);
 
-// Interaction (Slash Command) Handler
+// ---------- Slash Command Handler ----------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
@@ -132,30 +116,28 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// Message Handler with Moderation
+// ---------- Message Handler with Moderation ----------
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
   // Automod check
   if (checkMessageContent(message.content, message.author.id, message.guild)) {
     try {
-      // Warn user via DM (no auto-delete message)
       await message.author.send(
-        `⚠️ Your message in **${message.guild.name}** was flagged for inappropriate content. Please keep the server friendly.`
+        `⚠️ Your message in **${message.guild.name}** was flagged for inappropriate content.`
       );
 
-      // Log to mod-log channel
       const modLogChannel = message.guild.channels.cache.get('1410209233433006121');
       if (modLogChannel) {
-        modLogChannel.send(`🚨 **Automod Alert:** Message by ${message.author.tag} in <#${message.channel.id}> flagged.`);
+        modLogChannel.send(`🚨 **Automod Alert:** Message by ${message.author.tag} flagged.`);
       }
     } catch (err) {
       console.error('Automod error (DM/log):', err);
     }
-    return; // Stop further processing (no commands)
+    return;
   }
 
-  // Proceed only if prefix matches
+  // Prefix command handling
   if (!message.content.startsWith(PREFIX)) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
@@ -171,4 +153,5 @@ client.on('messageCreate', async message => {
   }
 });
 
+// ---------- Login ----------
 client.login(TOKEN);
