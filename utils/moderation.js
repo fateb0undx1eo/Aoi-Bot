@@ -43,6 +43,7 @@ const bannedWordsRaw = [
   "jigaboo", "wetback", "honky", "negro", "redskin", "sand nigger", "gypsy",
   "hooker", "nigger", "nigga", "ching chong", "chink", "dumbass", "fatass", "faggot",
   "dyke", "slut", "whore", "cunt", "bitch", "bastard", "motherfucker",
+  // Additional offensive phrases
   "fat fuck", "dickhead", "pussylicker", "cockhead", "tits", "dildo", "fisting"
 ];
 
