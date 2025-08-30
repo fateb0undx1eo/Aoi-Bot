@@ -26,11 +26,16 @@ module.exports = {
         // Send the embed with buttons
         const sentMsg = await message.channel.send({ embeds: [embed], components: [row] });
 
+        // Auto-delete waifu embed after 10s regardless
+        setTimeout(() => {
+            sentMsg.delete().catch(() => {});
+        }, 10000);
+
         // Collector for button interactions
         const filter = i => ['waifu_smash', 'waifu_pass'].includes(i.customId) && i.message.id === sentMsg.id;
         const collector = sentMsg.createMessageComponentCollector({ filter, time: 30000 });
 
-        let waifuClaimed = false; // Track if waifu is already smashed
+        let waifuClaimed = false;
 
         collector.on('collect', async i => {
             if (i.user.id !== message.author.id) {
@@ -65,11 +70,6 @@ module.exports = {
                     message.delete().catch(() => {});
                 }, 5000);
 
-                // Delete the waifu embed (the waifu itself) after 10s
-                setTimeout(() => {
-                    sentMsg.delete().catch(() => {});
-                }, 10000);
-
                 collector.stop("waifu_claimed");
             }
 
@@ -79,9 +79,8 @@ module.exports = {
         });
 
         collector.on('end', () => {
-            if (!waifuClaimed) {
-                sentMsg.edit({ components: [] }).catch(() => {});
-            }
+            // We don’t need to manually remove buttons now,
+            // because the message will be deleted in 10s anyway.
         });
     }
 };
