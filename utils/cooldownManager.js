@@ -1,52 +1,46 @@
 // utils/cooldownManager.js
 
-const commandCooldown = new Map();  // userId: { command: lastTimestamp }
-const spamTracker = new Map();      // userId: [timestamps]
-const globalCooldown = new Map();   // userId: expiryTimestamp
+const cooldownMap = new Map();           // userId: lastCommandTimestamp
+const activeUserMap = new Map();         // userId: lastCommandTimestamp
+const ACTIVE_WINDOW = 30000;             // 30s window for recent command users
+const BASE_COOLDOWN = 3000;              // 3s min
+const MAX_COOLDOWN = 12000;              // 12s max
 
-const PER_COMMAND_COOLDOWN = 7000;  // 7s
-const SPAM_WINDOW = 10000;          // 10s window for spam
-const SPAM_THRESHOLD = 5;           // 5 commands in 10s triggers global cooldown
-const GLOBAL_COOLDOWN = 15000;      // 15s global cooldown
-
-function canRunCommand(userId, commandName) {
-    const now = Date.now();
-
-    // Check global cooldown first
-    if (globalCooldown.has(userId) && now < globalCooldown.get(userId)) {
-        return { allowed: false, reason: 'globalCooldown' };
-    }
-
-    // Check per-command cooldown
-    if (!commandCooldown.has(userId)) commandCooldown.set(userId, {});
-    const userCommands = commandCooldown.get(userId);
-
-    if (userCommands[commandName] && now - userCommands[commandName] < PER_COMMAND_COOLDOWN) {
-        return { allowed: false, reason: 'commandCooldown' };
-    }
-
-    // Record this command timestamp
-    userCommands[commandName] = now;
-    commandCooldown.set(userId, userCommands);
-
-    // Track spam (commands per 10s)
-    if (!spamTracker.has(userId)) spamTracker.set(userId, []);
-    const timestamps = spamTracker.get(userId);
-
-    timestamps.push(now);
-    // Remove old timestamps outside spam window
-    while (timestamps.length && now - timestamps[0] > SPAM_WINDOW) {
-        timestamps.shift();
-    }
-
-    // Check spam threshold
-    if (timestamps.length >= SPAM_THRESHOLD) {
-        // Trigger global cooldown
-        globalCooldown.set(userId, now + GLOBAL_COOLDOWN);
-        return { allowed: false, reason: 'spamTriggered' };
-    }
-
-    return { allowed: true };
+function isOwner(userId, guild) {
+    if (!guild) return false;
+    // For guilds, check if userId matches guild owner ID
+    return guild.ownerId === userId;
 }
 
-module.exports = { canRunCommand };
+function getDynamicCooldown() {
+    const now = Date.now();
+    let activeCount = 0;
+    for (const last of activeUserMap.values()) {
+        if (now - last < ACTIVE_WINDOW) activeCount++;
+    }
+    // Scale: every 5 people active = +15% towards max (tweak for your taste)
+    const scale = Math.min(activeCount / 5, 1);
+    return Math.floor(BASE_COOLDOWN + scale * (MAX_COOLDOWN - BASE_COOLDOWN));
+}
+
+function checkCooldown(userId, guild) {
+    if (isOwner(userId, guild)) return { allowed: true };
+
+    const now = Date.now();
+    const cooldown = getDynamicCooldown();
+
+    const last = cooldownMap.get(userId) || 0;
+    const timeLeft = cooldown - (now - last);
+
+    // Mark user as recently active
+    activeUserMap.set(userId, now);
+
+    if (timeLeft > 0) {
+        return { allowed: false, cooldown, timeLeft };
+    } else {
+        cooldownMap.set(userId, now);
+        return { allowed: true };
+    }
+}
+
+module.exports = { checkCooldown };
