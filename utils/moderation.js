@@ -1,5 +1,5 @@
 const bannedWordsRaw = [
-  // Your original explicit list plus common slurs and racially offensive terms, carefully censored of safe words
+  // Your extensive banned words and slurs list (no "black" or safe words)
   "2g1c", "2 girls 1 cup", "acrotomophilia", "alabama hot pocket", "alaskan pipeline", "anal",
   "anilingus", "anus", "apeshit", "arsehole", "ass", "asshole", "assmunch", "auto erotic", "autoerotic",
   "babeland", "baby batter", "baby juice", "ball gag", "ball gravy", "ball kicking", "ball licking", "ball sack", "ball sucking",
@@ -38,15 +38,12 @@ const bannedWordsRaw = [
   "twinkie", "two girls one cup", "undressing", "upskirt", "urethra play", "urophilia", "vagina", "viagra", "vibrator",
   "violet wand", "vorarephilia", "voyeur", "voyeurweb", "vulva", "wank", "wetback", "wet dream", "white power", "whore",
   "worldsex", "wrinkled starfish", "xxx", "yaoi", "yellow showers", "yiffy", "zoophilia",
-
-  // Added racist and slur examples (do NOT allow these words)
+  // Racial and hateful slurs
   "coon", "coonass", "cracker", "chink", "gook", "spic", "beaner", "kike", "nip", "raghead",
-  "jigaboo", "wetback", "honky", "negro", "redskin", "sand nigger", "coonass", "gypsy",
-  "hooker", "nigger", "nigga", "ching chong", "chink", "ching", "dumbass", "fatass", "faggot",
+  "jigaboo", "wetback", "honky", "negro", "redskin", "sand nigger", "gypsy",
+  "hooker", "nigger", "nigga", "ching chong", "chink", "dumbass", "fatass", "faggot",
   "dyke", "slut", "whore", "cunt", "bitch", "bastard", "motherfucker",
-
-  // Additional offensive phrases
-  "fat fuck", "dickhead", "pussylicker", "cockhead", "tits", "dildo", "fisting",
+  "fat fuck", "dickhead", "pussylicker", "cockhead", "tits", "dildo", "fisting"
 ];
 
 const allowedUserIds = new Set();
