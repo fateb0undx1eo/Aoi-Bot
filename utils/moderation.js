@@ -50,8 +50,9 @@ function removeZalgo(text) {
   return text.normalize('NFKD').replace(/[\u0300-\u036f\u0483-\u0489\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/g, '');
 }
 
+// ✅ Fixed escape function: no need to escape `-` outside []
 function escapeRegex(string) {
-  return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 const bannedRegexes = bannedWordsRaw.map(word => {
