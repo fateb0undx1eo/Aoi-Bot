@@ -57,11 +57,10 @@ function escapeRegex(string) {
   return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
-const patternString = bannedWordsRaw
-  .map(word => escapeRegex(word).replace(/\s+/g, '\\s+'))
-  .join('|');
-
-const bannedRegex = new RegExp(`\\b(${patternString})\\b`, 'iu');
+const bannedRegexes = bannedWordsRaw.map(word => {
+  const escaped = escapeRegex(word).replace(/\s+/g, '\\s+');
+  return new RegExp(`\\b${escaped}\\b`, 'iu');
+});
 
 function checkMessageContent(content, userId, guild) {
   if (!guild) return false;
@@ -69,7 +68,7 @@ function checkMessageContent(content, userId, guild) {
   if (allowedUserIds.has(userId)) return false;
 
   const normalized = removeZalgo(content.toLowerCase());
-  return bannedRegex.test(normalized);
+  return bannedRegexes.some(rx => rx.test(normalized));
 }
 
 function addAllowedUser(userId) {
