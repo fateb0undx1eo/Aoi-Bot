@@ -57,6 +57,7 @@ function escapeRegex(string) {
   return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
+// Create an array of regexes, one per banned word
 const bannedRegexes = bannedWordsRaw.map(word => {
   const escaped = escapeRegex(word).replace(/\s+/g, '\\s+');
   return new RegExp(`\\b${escaped}\\b`, 'iu');
