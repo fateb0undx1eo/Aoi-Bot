@@ -1,5 +1,4 @@
 const bannedWordsRaw = [
-  // Your extensive banned words and slurs list (no "black" or safe words)
   "2g1c", "2 girls 1 cup", "acrotomophilia", "alabama hot pocket", "alaskan pipeline", "anal",
   "anilingus", "anus", "apeshit", "arsehole", "ass", "asshole", "assmunch", "auto erotic", "autoerotic",
   "babeland", "baby batter", "baby juice", "ball gag", "ball gravy", "ball kicking", "ball licking", "ball sack", "ball sucking",
@@ -57,10 +56,9 @@ function escapeRegex(string) {
   return string.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 }
 
-// Create an array of regexes, one per banned word
 const bannedRegexes = bannedWordsRaw.map(word => {
   const escaped = escapeRegex(word).replace(/\s+/g, '\\s+');
-  return new RegExp(`\\b${escaped}\\b`, 'iu');
+  return new RegExp(`\\b${escaped}\\b`, 'iu');  // Correctly escaped word boundaries
 });
 
 function checkMessageContent(content, userId, guild) {
