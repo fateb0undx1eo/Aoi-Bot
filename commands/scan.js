@@ -32,4 +32,4 @@ module.exports = {
             await message.reply("❌ Something went wrong during the scan.");
         }
     }
-};};
+};
