@@ -37,12 +37,10 @@ const bannedWordsRaw = [
   "twinkie", "two girls one cup", "undressing", "upskirt", "urethra play", "urophilia", "vagina", "viagra", "vibrator",
   "violet wand", "vorarephilia", "voyeur", "voyeurweb", "vulva", "wank", "wetback", "wet dream", "white power", "whore",
   "worldsex", "wrinkled starfish", "xxx", "yaoi", "yellow showers", "yiffy", "zoophilia",
-  // Racial and hateful slurs
   "coon", "coonass", "cracker", "chink", "gook", "spic", "beaner", "kike", "nip", "raghead",
   "jigaboo", "wetback", "honky", "negro", "redskin", "sand nigger", "gypsy",
   "hooker", "nigger", "nigga", "ching chong", "chink", "dumbass", "fatass", "faggot",
   "dyke", "slut", "whore", "cunt", "bitch", "bastard", "motherfucker",
-  // Additional offensive phrases
   "fat fuck", "dickhead", "pussylicker", "cockhead", "tits", "dildo", "fisting"
 ];
 
@@ -58,7 +56,7 @@ function escapeRegex(string) {
 
 const bannedRegexes = bannedWordsRaw.map(word => {
   const escaped = escapeRegex(word).replace(/\s+/g, '\\s+');
-  return new RegExp(`\\b${escaped}\\b`, 'iu');  // Correctly escaped word boundaries
+  return new RegExp(`\\b${escaped}\\b`, 'iu');
 });
 
 function checkMessageContent(content, userId, guild) {
