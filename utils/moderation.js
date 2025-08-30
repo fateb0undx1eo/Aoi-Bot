@@ -27,17 +27,13 @@ for (const lang of languages) {
   }
 }
 bannedWords = bannedWords.concat(customWords);
-
 // Deduplicate + lowercase
 bannedWords = [...new Set(bannedWords.map(w => w.toLowerCase()))];
-
-// Filter out very short words to reduce false positives (optional)
+// Filter out very short words
 bannedWords = bannedWords.filter(word => word.length > 2);
-
 console.log(`Total banned words loaded: ${bannedWords.length}`);
 
 // --- Helpers ---
-
 function normalizeText(text) {
   return text
     .normalize("NFD")
@@ -45,15 +41,12 @@ function normalizeText(text) {
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .toLowerCase();
 }
-
 function stripZalgo(text) {
   return text.replace(/[\u0300-\u036F\u0489]+/g, "");
 }
-
 function escapeRegex(word) {
   return word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-
 function buildRegex(word) {
   if (word.includes(" ")) {
     return new RegExp(escapeRegex(word), "i");
@@ -62,13 +55,16 @@ function buildRegex(word) {
   }
 }
 
-// --- Main check function ---
-
-function checkMessageContent(content, userId, guild) {
+// --- Main check function, async because of owner fetching ---
+async function checkMessageContent(content, userId, guild) {
   if (!guild) return { flagged: false, matchedWord: null };
 
-  // Exclude server owner from filtering
-  if (guild.ownerId === userId) {
+  let ownerId = guild.ownerId;
+  if (!ownerId) {
+    const owner = await guild.fetchOwner();
+    ownerId = owner.id;
+  }
+  if (ownerId === userId) {
     return { flagged: false, matchedWord: null };
   }
 
@@ -80,6 +76,7 @@ function checkMessageContent(content, userId, guild) {
       return { flagged: true, matchedWord: word };
     }
   }
+
   return { flagged: false, matchedWord: null };
 }
 
