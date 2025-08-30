@@ -3,7 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const { startAutoPoster } = require('./utils/autoPoster');
-const quoteManager = require('./utils/quoteManager'); // Import quoteManager
+const quoteManager = require('./utils/quoteManager');
+const { checkMessageContent } = require('./utils/moderation');
+
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const PREFIX = 's!';
@@ -18,7 +20,7 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers // PATCH: future-proof for userinfo etc.
+    GatewayIntentBits.GuildMembers
   ],
   partials: [Partials.Channel]
 });
@@ -34,7 +36,7 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
     if (stat.isDirectory()) {
       loadCommands(fullPath);
     } else if (file.endsWith('.js')) {
-      delete require.cache[require.resolve(fullPath)]; // PATCH: hot-reload friendly
+      delete require.cache[require.resolve(fullPath)];
       const command = require(fullPath);
       if (command.name && typeof command.execute === 'function') {
         client.commands.set(command.name, command);
@@ -50,6 +52,7 @@ loadCommands();
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
   startAutoPoster(client, MEME_CHANNEL_ID);
+
   // Load guild quote config and start quote scheduler
   quoteManager.loadConfig();
   for (const guildId of Object.keys(quoteManager.guildConfigs)) {
@@ -61,21 +64,13 @@ client.once('ready', () => {
       console.log(`Skipping quote scheduler for guild ${guildId} due to missing config.`);
     }
   }
+
   // ---------- PATCH: simple presence ----------
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
 
 // --------- Advanced Cache Cleaner ---------
-
-// Cache registry: add your caches here when creating / updating caches
 client.caches = new Map();
-
-/**
- * Register a cache at runtime to be auto trimmed
- * @param {string} key - Unique cache name
- * @param {Array} cacheArray - The cache array reference
- * @param {number} maxSize - Maximum allowed cache size
- */
 client.registerCache = function (key, cacheArray, maxSize = 50) {
   if (!Array.isArray(cacheArray)) {
     console.warn(`[CacheCleaner] Can't register cache '${key}': Not an array.`);
@@ -84,13 +79,6 @@ client.registerCache = function (key, cacheArray, maxSize = 50) {
   this.caches.set(key, { cacheArray, maxSize });
   console.log(`[CacheCleaner] Registered cache '${key}' with max size ${maxSize}.`);
 };
-
-/**
- * Trim a single cache array to maxSize, removing oldest entries (start of array)
- * @param {Array} cacheArray 
- * @param {number} maxSize 
- * @returns {number} Number of removed entries
- */
 function trimCache(cacheArray, maxSize) {
   let removedCount = 0;
   while (cacheArray.length > maxSize) {
@@ -99,12 +87,9 @@ function trimCache(cacheArray, maxSize) {
   }
   return removedCount;
 }
-
-// Periodic cache cleaning function
 function performCacheCleaning() {
   console.log('[CacheCleaner] Starting cache cleanup...');
   let totalRemoved = 0;
-
   for (const [key, { cacheArray, maxSize }] of client.caches.entries()) {
     if (!cacheArray || !Array.isArray(cacheArray)) {
       console.warn(`[CacheCleaner] Cache '${key}' is not an array or invalid.`);
@@ -118,28 +103,23 @@ function performCacheCleaning() {
       console.log(`[CacheCleaner] Trimmed cache '${key}' from ${beforeSize} to ${afterSize} (removed ${removed})`);
     }
   }
-
   console.log(`[CacheCleaner] Cache cleanup completed. Total entries removed: ${totalRemoved}`);
 }
-
-// Start periodic cache cleaner task (every hour)
 setInterval(performCacheCleaning, 60 * 60 * 1000);
 
-// --------- Example: Register initial meme and quote caches (replace these with your actual caches) ---------
-
-// Example caches — replace or link to your actual meme/quote caches in your bot
-client.memeCache = [];  // Your meme cache array reference here
-client.quoteCache = []; // Your quote cache array reference here
-
+// Example caches — replace or link with actual caches in your bot
+client.memeCache = [];
+client.quoteCache = [];
 client.registerCache('memeCache', client.memeCache, 50);
 client.registerCache('quoteCache', client.quoteCache, 50);
 
-// -----------------------------------------------------
-
+// Interaction (Slash Command) Handler
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
+
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
+
   try {
     if (command.slashExecute) await command.slashExecute(interaction, client);
     else await command.execute(interaction, client);
@@ -152,12 +132,37 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// Message Handler with Moderation
 client.on('messageCreate', async message => {
-  if (message.author.bot || !message.content.startsWith(PREFIX)) return;
+  if (message.author.bot) return;
+
+  // Automod check
+  if (checkMessageContent(message.content, message.author.id, message.guild)) {
+    try {
+      // Warn user via DM (no auto-delete message)
+      await message.author.send(
+        `⚠️ Your message in **${message.guild.name}** was flagged for inappropriate content. Please keep the server friendly.`
+      );
+
+      // Log to mod-log channel
+      const modLogChannel = message.guild.channels.cache.get('1410209233433006121');
+      if (modLogChannel) {
+        modLogChannel.send(`🚨 **Automod Alert:** Message by ${message.author.tag} in <#${message.channel.id}> flagged.`);
+      }
+    } catch (err) {
+      console.error('Automod error (DM/log):', err);
+    }
+    return; // Stop further processing (no commands)
+  }
+
+  // Proceed only if prefix matches
+  if (!message.content.startsWith(PREFIX)) return;
+
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
   const command = client.commands.get(commandName);
   if (!command) return;
+
   try {
     await command.execute(message, client, args);
   } catch (error) {
