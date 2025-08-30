@@ -30,9 +30,14 @@ bannedWords = bannedWords.concat(customWords);
 
 // Deduplicate + lowercase
 bannedWords = [...new Set(bannedWords.map(w => w.toLowerCase()))];
+
+// Filter out very short words to reduce false positives (optional)
+bannedWords = bannedWords.filter(word => word.length > 2);
+
 console.log(`Total banned words loaded: ${bannedWords.length}`);
 
 // --- Helpers ---
+
 function normalizeText(text) {
   return text
     .normalize("NFD")
@@ -58,8 +63,15 @@ function buildRegex(word) {
 }
 
 // --- Main check function ---
+
 function checkMessageContent(content, userId, guild) {
   if (!guild) return { flagged: false, matchedWord: null };
+
+  // Exclude server owner from filtering
+  if (guild.ownerId === userId) {
+    return { flagged: false, matchedWord: null };
+  }
+
   const cleanContent = normalizeText(stripZalgo(content));
   for (const word of bannedWords) {
     const regex = buildRegex(word);
