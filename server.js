@@ -1,9 +1,10 @@
 // server.js
+require('dotenv').config();
 const { Client, GatewayIntentBits } = require('discord.js');
 const moderation = require('./utils/moderation.js'); // <- from utils folder
-require('dotenv').config();
+const express = require('express');
 
-// Create client with required intents
+// ---------- Client Setup ----------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -13,12 +14,12 @@ const client = new Client({
   ],
 });
 
-// When bot is ready
+// ---------- Ready Event ----------
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
-// Message moderation handler
+// ---------- Message Moderation ----------
 client.on('messageCreate', async (message) => {
   if (!message.guild || message.author.bot) return;
 
@@ -46,13 +47,11 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Start bot
+// ---------- Login ----------
 client.login(process.env.TOKEN);
 
-// --- Dummy web server for Render health check ---
-const express = require('express');
+// ---------- Dummy Web Server for Render ----------
 const app = express();
-
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
