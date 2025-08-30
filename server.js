@@ -48,3 +48,17 @@ client.on('messageCreate', async (message) => {
 
 // Start bot
 client.login(process.env.TOKEN);
+
+// --- Dummy web server for Render health check ---
+const express = require('express');
+const app = express();
+
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('✅ Discord bot is running!');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 Web server running on port ${PORT}`);
+});
