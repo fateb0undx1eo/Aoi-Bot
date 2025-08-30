@@ -16,6 +16,7 @@
     "nekosapi": "^0.6.4",
     "node-fetch": "^2.7.0",
     "node-vibrant": "^3.1.6",
+    "naughty-words": "^1.2.0",
     "request": "^2.88.2",
     "workerpool": "^9.3.3"
   }
