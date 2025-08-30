@@ -1,34 +1,48 @@
 const fs = require("fs");
 const path = require("path");
+const naughtyWords = require("naughty-words");
 
-// Load badwords.json dynamically (so you can update it without touching code)
+// Load custom bad words from badwords.json
 const badWordsPath = path.join(__dirname, "badwords.json");
-let bannedWords = [];
-
-// Load words safely
+let customWords = [];
 try {
-  const data = fs.readFileSync(badWordsPath, "utf8");
-  bannedWords = JSON.parse(data);
+  customWords = JSON.parse(fs.readFileSync(badWordsPath, "utf8"));
 } catch (err) {
-  console.error("❌ Failed to load badwords.json:", err);
-  bannedWords = [];
+  console.error("⚠️ Could not load badwords.json:", err);
 }
+
+// Pick all supported languages from naughty-words
+const languages = [
+  "ar", "zh", "cs", "da", "nl", "en", "eo", "fil", "fi",
+  "fr", "fr-CA-u-sd-caqc", "de", "hi", "hu", "it", "ja",
+  "kab", "tlh", "ko", "no", "fa", "pl", "pt", "ru",
+  "es", "sv", "th", "tr"
+];
+
+// Merge all languages + custom words into one big list
+let bannedWords = [];
+for (const lang of languages) {
+  if (naughtyWords[lang]) {
+    bannedWords = bannedWords.concat(naughtyWords[lang]);
+  }
+}
+bannedWords = bannedWords.concat(customWords);
 
 // Escape regex special characters
 function escapeRegex(word) {
   return word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-// Check if message contains banned words
+// Check function
 function checkMessageContent(content, userId, guild) {
   for (const word of bannedWords) {
-    const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, "i"); // case-insensitive
+    const regex = new RegExp(`\\b${escapeRegex(word)}\\b`, "i");
     if (regex.test(content)) {
       console.log(`⚠️ User ${userId} in guild ${guild?.name} used banned word: ${word}`);
-      return true;
+      return { flagged: true, matchedWord: word };
     }
   }
-  return false;
+  return { flagged: false, matchedWord: null };
 }
 
 module.exports = { checkMessageContent };
