@@ -12,6 +12,9 @@ const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const PREFIX = 's!';
 
+// Hardcoded mod-log channel ID (can make per-guild config later)
+const MODLOG_CHANNEL_ID = '1410209233433006121';
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -24,6 +27,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
+// --- Command loader ---
 function loadCommands(dirPath = path.join(__dirname, 'commands')) {
   const files = fs.readdirSync(dirPath);
   for (const file of files) {
@@ -49,6 +53,7 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
 }
 loadCommands();
 
+// --- Ready event ---
 client.once('ready', () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
   startAutoPoster(client, MEME_CHANNEL_ID);
@@ -63,6 +68,7 @@ client.once('ready', () => {
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
 
+// --- Slash command handler ---
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const command = client.commands.get(interaction.commandName);
@@ -81,24 +87,51 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// --- Message handler (prefix + moderation) ---
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
   // Moderation check
-  if (message.guild && moderation.checkMessageContent(message.content, message.author.id, message.guild).flagged) {
-    try {
-      await message.author.send(`⚠️ Your message in **${message.guild.name}** was flagged for inappropriate content.`);
-      const modLogChannel = message.guild.channels.cache.get('1410209233433006121');
-      if (modLogChannel) {
-        modLogChannel.send(`🚨 Automod Alert: Message by ${message.author.tag} flagged in <#${message.channel.id}>.`);
+  if (message.guild) {
+    const { flagged, matchedWord } = moderation.checkMessageContent(
+      message.content,
+      message.author.id,
+      message.guild
+    );
+
+    if (flagged) {
+      try {
+        // Delete message
+        await message.delete();
+
+        // DM user
+        await message.author.send(
+          `⚠️ Your message in **${message.guild.name}** was removed for containing a banned word: **${matchedWord}**.`
+        );
+
+        // Log to mod-log
+        const modLogChannel = message.guild.channels.cache.get(MODLOG_CHANNEL_ID);
+        if (modLogChannel) {
+          await modLogChannel.send({
+            content: `🚨 **Automod Alert**  
+**User:** ${message.author.tag} (${message.author.id})  
+**Channel:** <#${message.channel.id}>  
+**Matched Word:** \`${matchedWord}\`  
+**Message Content:** ${message.content}`,
+          });
+        }
+
+        console.log(
+          `🗑️ Deleted message from ${message.author.tag} in #${message.channel.name} (word: ${matchedWord})`
+        );
+      } catch (err) {
+        console.error('Automod delete/DM/log error:', err);
       }
-    } catch (err) {
-      console.error('Automod DM/log error:', err);
+      return; // stop processing further (don’t run prefix commands)
     }
-    return;
   }
 
-  // Command prefix handling
+  // Prefix command handling
   if (!message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
@@ -112,6 +145,7 @@ client.on('messageCreate', async message => {
   }
 });
 
+// --- Express webserver ---
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send('✅ Discord bot is running!'));
