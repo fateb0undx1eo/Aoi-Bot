@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const naughtyWords = require("naughty-words");
 
-// Load custom bad words from badwords.json in the same folder
+// Load custom bad words
 const badWordsPath = path.join(__dirname, "badwords.json");
 let customWords = [];
 try {
@@ -12,7 +12,7 @@ try {
   console.error("⚠️ Could not load badwords.json:", err);
 }
 
-// Languages to load from naughty-words
+// Languages to load
 const languages = [
   "ar", "zh", "cs", "da", "nl", "en", "eo", "fil", "fi",
   "fr", "fr-CA-u-sd-caqc", "de", "hi", "hu", "it", "ja",
@@ -20,7 +20,6 @@ const languages = [
   "es", "sv", "th", "tr"
 ];
 
-// Merge naughty-words + custom words
 let bannedWords = [];
 for (const lang of languages) {
   if (naughtyWords[lang]) {
@@ -29,12 +28,11 @@ for (const lang of languages) {
 }
 bannedWords = bannedWords.concat(customWords);
 
-// Deduplicate and lowercase all banned words
+// Deduplicate + lowercase
 bannedWords = [...new Set(bannedWords.map(w => w.toLowerCase()))];
 console.log(`Total banned words loaded: ${bannedWords.length}`);
 
 // --- Helpers ---
-
 function normalizeText(text) {
   return text
     .normalize("NFD")
@@ -60,7 +58,6 @@ function buildRegex(word) {
 }
 
 // --- Main check function ---
-
 function checkMessageContent(content, userId, guild) {
   if (!guild) return { flagged: false, matchedWord: null };
   const cleanContent = normalizeText(stripZalgo(content));
