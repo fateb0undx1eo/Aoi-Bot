@@ -7,6 +7,7 @@ const badWordsPath = path.join(__dirname, "badwords.json");
 let customWords = [];
 try {
   customWords = JSON.parse(fs.readFileSync(badWordsPath, "utf8"));
+  console.log(`✅ Loaded ${customWords.length} custom bad words from badwords.json`);
 } catch (err) {
   console.error("⚠️ Could not load badwords.json:", err);
 }
@@ -29,13 +30,14 @@ for (const lang of languages) {
 bannedWords = bannedWords.concat(customWords);
 // Deduplicate and lowercase
 bannedWords = [...new Set(bannedWords.map(w => w.toLowerCase()))];
+console.log(`Total banned words loaded: ${bannedWords.length}`);
 
 // --- Text Normalization Helpers ---
 
 // Remove accents & diacritics (e.g. fųçķ → fuck)
 function normalizeText(text) {
   return text
-    .normalize("NFD")            // split accents
+    .normalize("NFD")             // split accents
     .replace(/[\u0300-\u036f]/g, "") // remove diacritics
     .replace(/[\u200B-\u200D\uFEFF]/g, "") // remove zero-width chars
     .toLowerCase();
@@ -65,8 +67,8 @@ function buildRegex(word) {
 // --- Main Check Function ---
 function checkMessageContent(content, userId, guild) {
   if (!guild) return { flagged: false, matchedWord: null };
-
-  // Normalize and strip zalgo before matching
+  
+  // Normalize and strip Zalgo before matching
   const cleanContent = normalizeText(stripZalgo(content));
 
   for (const word of bannedWords) {
