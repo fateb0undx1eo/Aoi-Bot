@@ -1,11 +1,9 @@
-// index.js
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const { startAutoPoster } = require('./utils/autoPoster');
 const quoteManager = require('./utils/quoteManager');
-const { checkMessageContent } = require('./utils/moderation');
 
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
@@ -19,9 +17,9 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
   ],
-  partials: [Partials.Channel]
+  partials: [Partials.Channel],
 });
 
 client.commands = new Collection();
@@ -35,13 +33,17 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
     if (stat.isDirectory()) {
       loadCommands(fullPath);
     } else if (file.endsWith('.js')) {
-      delete require.cache[require.resolve(fullPath)];
-      const command = require(fullPath);
-      if (command.name && typeof command.execute === 'function') {
-        client.commands.set(command.name, command);
-        console.log(`✅ Loaded command: ${command.name} (${fullPath})`);
-      } else {
-        console.warn(`⚠️ Skipped invalid command file: ${file}`);
+      try {
+        delete require.cache[require.resolve(fullPath)];
+        const command = require(fullPath);
+        if (command.name && typeof command.execute === 'function') {
+          client.commands.set(command.name, command);
+          console.log(`✅ Loaded command: ${command.name} (${fullPath})`);
+        } else {
+          console.warn(`⚠️ Skipped invalid command file: ${file}`);
+        }
+      } catch (e) {
+        console.error(`❌ Error loading command ${file}:`, e);
       }
     }
   }
@@ -52,7 +54,6 @@ loadCommands();
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
   startAutoPoster(client, MEME_CHANNEL_ID);
-
   quoteManager.loadConfig();
   for (const guildId of Object.keys(quoteManager.guildConfigs)) {
     const config = quoteManager.guildConfigs[guildId];
@@ -61,7 +62,6 @@ client.once('ready', () => {
       quoteManager.startScheduler(client, guildId);
     }
   }
-
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
 
@@ -90,7 +90,6 @@ function performCacheCleaning() {
   if (totalRemoved > 0) console.log(`[CacheCleaner] Total entries removed: ${totalRemoved}`);
 }
 setInterval(performCacheCleaning, 60 * 60 * 1000);
-
 // Example caches
 client.memeCache = [];
 client.quoteCache = [];
@@ -100,10 +99,8 @@ client.registerCache('quoteCache', client.quoteCache, 50);
 // ---------- Slash Command Handler ----------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
   const command = client.commands.get(interaction.commandName);
   if (!command) return;
-
   try {
     if (command.slashExecute) await command.slashExecute(interaction, client);
     else await command.execute(interaction, client);
@@ -116,32 +113,15 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ---------- Message Handler with Moderation ----------
+// ---------- Message Handler without Automod ----------
 client.on('messageCreate', async message => {
   if (message.author.bot) return;
 
-  // Automod check
-  if (checkMessageContent(message.content, message.author.id, message.guild)) {
-    try {
-      await message.author.send(
-        `⚠️ Your message in **${message.guild.name}** was flagged for inappropriate content.`
-      );
-
-      const modLogChannel = message.guild.channels.cache.get('1410209233433006121');
-      if (modLogChannel) {
-        modLogChannel.send(`🚨 **Automod Alert:** Message by ${message.author.tag} flagged.`);
-      }
-    } catch (err) {
-      console.error('Automod error (DM/log):', err);
-    }
-    return;
-  }
-
-  // Prefix command handling
   if (!message.content.startsWith(PREFIX)) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
+
   const command = client.commands.get(commandName);
   if (!command) return;
 
