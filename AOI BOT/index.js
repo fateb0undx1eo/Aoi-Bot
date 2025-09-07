@@ -115,8 +115,16 @@ client.on('interactionCreate', async interaction => {
 
 // ---------- Message Handler without Automod ----------
 client.on('messageCreate', async message => {
-  if (message.author.bot) return;
+  // Delete all messages in specific channel after 5s
+  if (message.channel.id === "1390627860527448118") {
+    setTimeout(() => {
+      message.delete().catch(() => {});
+    }, 5000);
+    return;
+  }
 
+  // Normal prefix-based commands (ignore bot msgs here)
+  if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
@@ -135,6 +143,7 @@ client.on('messageCreate', async message => {
 
 // ---------- Login ----------
 client.login(TOKEN);
+
 // ---------- Keep Alive Web Server (for Render + UptimeRobot) ----------
 const express = require("express");
 const app = express();
@@ -147,4 +156,3 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🌐 Keep-alive server running on port ${PORT}`);
 });
-
