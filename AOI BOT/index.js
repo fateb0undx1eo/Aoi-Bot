@@ -4,7 +4,6 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const { startAutoPoster } = require('./utils/autoPoster');
 const quoteManager = require('./utils/quoteManager');
-const express = require("express");
 
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
@@ -90,13 +89,7 @@ function performCacheCleaning() {
   }
   if (totalRemoved > 0) console.log(`[CacheCleaner] Total entries removed: ${totalRemoved}`);
 }
-setInterval(() => {
-  try {
-    performCacheCleaning();
-  } catch (err) {
-    console.error("[CacheCleaner Error]", err);
-  }
-}, 60 * 60 * 1000);
+setInterval(performCacheCleaning, 60 * 60 * 1000);
 
 // Example caches
 client.memeCache = [];
@@ -123,15 +116,16 @@ client.on('interactionCreate', async interaction => {
 
 // ---------- Message Handler ----------
 client.on('messageCreate', async message => {
-  // --- Special channel: auto-delete all messages after 5s ---
+  // Auto-delete logic for bump channel
   if (message.channel.id === "1390627860527448118") {
     setTimeout(() => {
-      message.delete().catch(() => {});
+      message.delete().catch(err => {
+        console.error(`[AutoDelete] Failed to delete message in bump channel:`, err.message);
+      });
     }, 5000);
-    return; // skip further processing for this channel
+    return; // don't process commands here
   }
 
-  // --- Normal command handling (ignore bot messages) ---
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
 
@@ -149,10 +143,30 @@ client.on('messageCreate', async message => {
   }
 });
 
+// ---------- Extra Safety: Sweep bump channel every 10s ----------
+setInterval(async () => {
+  try {
+    const channel = await client.channels.fetch("1390627860527448118");
+    if (!channel || !channel.isTextBased()) return;
+
+    const messages = await channel.messages.fetch({ limit: 10 });
+    const toDelete = messages.filter(m => Date.now() - m.createdTimestamp > 5000);
+
+    for (const msg of toDelete.values()) {
+      await msg.delete().catch(err => {
+        console.error("[AutoCleaner Error]", err.message);
+      });
+    }
+  } catch (err) {
+    console.error("[AutoCleaner Fatal Error]", err.message);
+  }
+}, 10000);
+
 // ---------- Login ----------
 client.login(TOKEN);
 
-// ---------- Keep Alive Web Server (for Render + UptimeRobot) ----------
+// ---------- Keep Alive Web Server ----------
+const express = require("express");
 const app = express();
 
 app.get("/", (req, res) => {
