@@ -4,7 +4,7 @@ const memeSubreddits = require('../memesubreddits'); // Import shared subreddit 
 
 let autoPostInterval = null;
 let nextPostTime = null;
-let intervalSeconds = 900; // default 15 minutes
+let intervalSeconds = 3600; // default 15 minutes
 let subredditsRef = memeSubreddits; // Use shared subreddit array
 
 // Supported image extensions for Discord embeds
