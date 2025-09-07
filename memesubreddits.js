@@ -1,7 +1,7 @@
 // src/memesubreddits.js
 
 module.exports = [
-  // General/funny meme subreddits
+  // ---------- General / Funny Meme Subreddits ----------
   'dankmemes',
   'memes',
   'funny',
@@ -11,12 +11,23 @@ module.exports = [
   'me_irl',
   'HolUp',
   'comedyheaven',
+  'MemeEconomy',
+  '2meirl4meirl',
+  'starterpacks',
+  'ComedyCemetery',
+  'deepfriedmemes',
+  'okbuddyretard',
+  'surrealmemes',
+  'bonehurtingjuice',
+  'funnyandsad',
+  'unexpected',
+  'politicalhumor',
+  'programmerhumor',
 
-  // Anime meme/image subreddits
+  // ---------- Anime-specific Meme Subreddits ----------
   'animemes',
   'goodanimemes',
   'anime_irl',
-  'awwnime',
   'AnimeFunny',
   'AnimeMeme',
   'classicanimemes',
@@ -28,20 +39,5 @@ module.exports = [
   'jojo_memes',
   'attackontitanmemes',
   're_zero',
-  'gurrenlagann',
-  'animecirclejerk',
-  'animememesplus',
-  'LoveLive',
-  'idolmemes',
-  'MobPsycho100',
-  'Kaguya_memes',
-  'Monogatari',
-
-  // Discord meme subreddits
-  'DiscordMemes',
-  'officialdiscordmemes',
-  'discordappmemes',
-  'discord_irl',
-  'discordfunny',
-  'discordmemers'
+  'animememesplus'
 ];
