@@ -4,6 +4,7 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const { startAutoPoster } = require('./utils/autoPoster');
 const quoteManager = require('./utils/quoteManager');
+const express = require("express");
 
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
@@ -89,7 +90,14 @@ function performCacheCleaning() {
   }
   if (totalRemoved > 0) console.log(`[CacheCleaner] Total entries removed: ${totalRemoved}`);
 }
-setInterval(performCacheCleaning, 60 * 60 * 1000);
+setInterval(() => {
+  try {
+    performCacheCleaning();
+  } catch (err) {
+    console.error("[CacheCleaner Error]", err);
+  }
+}, 60 * 60 * 1000);
+
 // Example caches
 client.memeCache = [];
 client.quoteCache = [];
@@ -113,17 +121,17 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ---------- Message Handler without Automod ----------
+// ---------- Message Handler ----------
 client.on('messageCreate', async message => {
-  // Delete all messages in specific channel after 5s
+  // --- Special channel: auto-delete all messages after 5s ---
   if (message.channel.id === "1390627860527448118") {
     setTimeout(() => {
       message.delete().catch(() => {});
     }, 5000);
-    return;
+    return; // skip further processing for this channel
   }
 
-  // Normal prefix-based commands (ignore bot msgs here)
+  // --- Normal command handling (ignore bot messages) ---
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
 
@@ -145,7 +153,6 @@ client.on('messageCreate', async message => {
 client.login(TOKEN);
 
 // ---------- Keep Alive Web Server (for Render + UptimeRobot) ----------
-const express = require("express");
 const app = express();
 
 app.get("/", (req, res) => {
