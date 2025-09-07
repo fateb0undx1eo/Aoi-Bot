@@ -116,14 +116,16 @@ client.on('interactionCreate', async interaction => {
 
 // ---------- Message Handler ----------
 client.on('messageCreate', async message => {
-  // Auto-delete logic for bump channel
-  if (message.channel.id === "1390627860527448118") {
+  const bumpChannelId = "1390627860527448118";
+
+  // Auto-delete in bump channel only
+  if (message.channel.id === bumpChannelId) {
     setTimeout(() => {
       message.delete().catch(err => {
         console.error(`[AutoDelete] Failed to delete message in bump channel:`, err.message);
       });
     }, 5000);
-    return; // don't process commands here
+    return; // don't process commands in bump channel
   }
 
   if (message.author.bot) return;
@@ -146,7 +148,8 @@ client.on('messageCreate', async message => {
 // ---------- Extra Safety: Sweep bump channel every 10s ----------
 setInterval(async () => {
   try {
-    const channel = await client.channels.fetch("1390627860527448118");
+    const channelId = "1390627860527448118";
+    const channel = await client.channels.fetch(channelId);
     if (!channel || !channel.isTextBased()) return;
 
     const messages = await channel.messages.fetch({ limit: 10 });
