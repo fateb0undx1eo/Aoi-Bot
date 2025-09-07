@@ -7,6 +7,7 @@ const quoteManager = require('./utils/quoteManager');
 
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
+const BUMP_CHANNEL_ID = process.env.BUMP_CHANNEL_ID; // <-- new
 const PREFIX = 's!';
 
 // ---------- Global rejection handler ----------
@@ -116,10 +117,8 @@ client.on('interactionCreate', async interaction => {
 
 // ---------- Message Handler ----------
 client.on('messageCreate', async message => {
-  const bumpChannelId = "1390627860527448118";
-
   // Auto-delete in bump channel only
-  if (message.channel.id === bumpChannelId) {
+  if (message.channel.id === BUMP_CHANNEL_ID) {
     setTimeout(() => {
       message.delete().catch(err => {
         console.error(`[AutoDelete] Failed to delete message in bump channel:`, err.message);
@@ -148,8 +147,8 @@ client.on('messageCreate', async message => {
 // ---------- Extra Safety: Sweep bump channel every 10s ----------
 setInterval(async () => {
   try {
-    const channelId = "1390627860527448118";
-    const channel = await client.channels.fetch(channelId);
+    if (!BUMP_CHANNEL_ID) return;
+    const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
     if (!channel || !channel.isTextBased()) return;
 
     const messages = await channel.messages.fetch({ limit: 10 });
