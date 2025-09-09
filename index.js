@@ -4,14 +4,19 @@ const path = require('path');
 const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = require('discord.js');
 const { startAutoPoster } = require('./utils/autoPoster');
 const quoteManager = require('./utils/quoteManager');
+const express = require("express");
 
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
-const BUMP_CHANNEL_ID = process.env.BUMP_CHANNEL_ID; // <-- new
+const BUMP_CHANNEL_ID = process.env.BUMP_CHANNEL_ID;
 const PREFIX = 's!';
 
-// ---------- Global rejection handler ----------
+// ---------- Global rejection / crash handlers ----------
 process.on('unhandledRejection', err => console.error('[Unhandled Rejection]', err));
+process.on('uncaughtException', err => {
+  console.error('[Uncaught Exception]', err);
+  process.exit(1); // Let Render restart
+});
 
 const client = new Client({
   intents: [
@@ -65,6 +70,26 @@ client.once('ready', () => {
   }
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
+
+// ---------- Connection & Error Handlers ----------
+client.on("error", err => console.error("Client error:", err));
+client.on("shardDisconnect", (event, id) =>
+  console.warn(`❌ Shard ${id} disconnected (${event.code}).`)
+);
+client.on("shardReconnecting", id =>
+  console.log(`🔄 Shard ${id} reconnecting...`)
+);
+client.on("shardReady", id =>
+  console.log(`✅ Shard ${id} reconnected successfully`)
+);
+
+// ---------- Watchdog: force restart if disconnected too long ----------
+setInterval(() => {
+  if (client.ws.status !== 0) { // 0 = READY
+    console.error("⚠️ Lost connection to Discord, forcing restart...");
+    process.exit(1); // Render restarts service automatically
+  }
+}, 5 * 60 * 1000);
 
 // ---------- Cache Cleaner ----------
 client.caches = new Map();
@@ -124,7 +149,7 @@ client.on('messageCreate', async message => {
         console.error(`[AutoDelete] Failed to delete message in bump channel:`, err.message);
       });
     }, 5000);
-    return; // don't process commands in bump channel
+    return;
   }
 
   if (message.author.bot) return;
@@ -168,13 +193,14 @@ setInterval(async () => {
 client.login(TOKEN);
 
 // ---------- Keep Alive Web Server ----------
-const express = require("express");
 const app = express();
-
 app.get("/", (req, res) => {
-  res.send("Bot is alive! ✅");
+  if (client.ws.status === 0) {
+    res.send("✅ Bot connected to Discord!");
+  } else {
+    res.status(500).send("❌ Bot not connected to Discord.");
+  }
 });
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🌐 Keep-alive server running on port ${PORT}`);
