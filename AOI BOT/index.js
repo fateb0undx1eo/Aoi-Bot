@@ -5,17 +5,15 @@ const { Client, Collection, GatewayIntentBits, Partials, ActivityType } = requir
 const { startAutoPoster } = require('./utils/autoPoster');
 const quoteManager = require('./utils/quoteManager');
 const express = require("express");
-
 const TOKEN = process.env.TOKEN;
 const MEME_CHANNEL_ID = process.env.MEME_CHANNEL_ID;
 const BUMP_CHANNEL_ID = process.env.BUMP_CHANNEL_ID;
 const PREFIX = 's!';
 
-// ---------- Global rejection / crash handlers ----------
 process.on('unhandledRejection', err => console.error('[Unhandled Rejection]', err));
 process.on('uncaughtException', err => {
   console.error('[Uncaught Exception]', err);
-  process.exit(1); // Let Render restart
+  process.exit(1);
 });
 
 const client = new Client({
@@ -30,8 +28,8 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// ---------- Command Loader ----------
 function loadCommands(dirPath = path.join(__dirname, 'commands')) {
+  // Loads all commands from commands folder recursively
   const files = fs.readdirSync(dirPath);
   for (const file of files) {
     const fullPath = path.join(dirPath, file);
@@ -56,10 +54,11 @@ function loadCommands(dirPath = path.join(__dirname, 'commands')) {
 }
 loadCommands();
 
-// ---------- Ready Event ----------
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
   startAutoPoster(client, MEME_CHANNEL_ID);
+  
+  // Load quote configs and start schedulers for all guilds with valid configs
   quoteManager.loadConfigs();
   for (const guildId of Object.keys(quoteManager.guildConfigs)) {
     const config = quoteManager.guildConfigs[guildId];
@@ -68,10 +67,10 @@ client.once('ready', () => {
       quoteManager.startScheduler(client, guildId);
     }
   }
+
   client.user.setActivity(`${PREFIX}help`, { type: ActivityType.Listening });
 });
 
-// ---------- Connection & Error Handlers ----------
 client.on("error", err => console.error("Client error:", err));
 client.on("shardDisconnect", (event, id) =>
   console.warn(`❌ Shard ${id} disconnected (${event.code}).`)
@@ -83,15 +82,13 @@ client.on("shardReady", id =>
   console.log(`✅ Shard ${id} reconnected successfully`)
 );
 
-// ---------- Watchdog: force restart if disconnected too long ----------
 setInterval(() => {
-  if (client.ws.status !== 0) { // 0 = READY
+  if (client.ws.status !== 0) {
     console.error("⚠️ Lost connection to Discord, forcing restart...");
-    process.exit(1); // Render restarts service automatically
+    process.exit(1);
   }
 }, 5 * 60 * 1000);
 
-// ---------- Cache Cleaner ----------
 client.caches = new Map();
 client.registerCache = function (key, cacheArray, maxSize = 50) {
   if (!Array.isArray(cacheArray)) return console.warn(`[CacheCleaner] Can't register cache '${key}': Not an array.`);
@@ -117,13 +114,11 @@ function performCacheCleaning() {
 }
 setInterval(performCacheCleaning, 60 * 60 * 1000);
 
-// Example caches
 client.memeCache = [];
 client.quoteCache = [];
 client.registerCache('memeCache', client.memeCache, 50);
 client.registerCache('quoteCache', client.quoteCache, 50);
 
-// ---------- Slash Command Handler ----------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const command = client.commands.get(interaction.commandName);
@@ -140,27 +135,19 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ---------- Message Handler ----------
 client.on('messageCreate', async message => {
-  // Auto-delete in bump channel only
   if (message.channel.id === BUMP_CHANNEL_ID) {
     setTimeout(() => {
-      message.delete().catch(err => {
-        console.error(`[AutoDelete] Failed to delete message in bump channel:`, err.message);
-      });
+      message.delete().catch(err => console.error(`[AutoDelete] Failed to delete message in bump channel:`, err.message));
     }, 5000);
     return;
   }
-
   if (message.author.bot) return;
   if (!message.content.startsWith(PREFIX)) return;
-
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
-
   const command = client.commands.get(commandName);
   if (!command) return;
-
   try {
     await command.execute(message, client, args);
   } catch (error) {
@@ -169,30 +156,23 @@ client.on('messageCreate', async message => {
   }
 });
 
-// ---------- Extra Safety: Sweep bump channel every 10s ----------
 setInterval(async () => {
   try {
     if (!BUMP_CHANNEL_ID) return;
     const channel = await client.channels.fetch(BUMP_CHANNEL_ID);
     if (!channel || !channel.isTextBased()) return;
-
     const messages = await channel.messages.fetch({ limit: 10 });
     const toDelete = messages.filter(m => Date.now() - m.createdTimestamp > 5000);
-
     for (const msg of toDelete.values()) {
-      await msg.delete().catch(err => {
-        console.error("[AutoCleaner Error]", err.message);
-      });
+      await msg.delete().catch(err => console.error("[AutoCleaner Error]", err.message));
     }
   } catch (err) {
     console.error("[AutoCleaner Fatal Error]", err.message);
   }
 }, 10000);
 
-// ---------- Login ----------
 client.login(TOKEN);
 
-// ---------- Keep Alive Web Server ----------
 const app = express();
 app.get("/", (req, res) => {
   if (client.ws.status === 0) {
@@ -202,6 +182,4 @@ app.get("/", (req, res) => {
   }
 });
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🌐 Keep-alive server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`🌐 Keep-alive server running on port ${PORT}`));
