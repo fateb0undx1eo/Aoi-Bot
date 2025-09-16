@@ -60,7 +60,7 @@ loadCommands();
 client.once('ready', () => {
   console.log(`${client.user.tag} is online!`);
   startAutoPoster(client, MEME_CHANNEL_ID);
-  quoteManager.loadConfig();
+  quoteManager.loadConfigs();
   for (const guildId of Object.keys(quoteManager.guildConfigs)) {
     const config = quoteManager.guildConfigs[guildId];
     if (config && config.quoteChannelId && config.quoteIntervalHours) {
