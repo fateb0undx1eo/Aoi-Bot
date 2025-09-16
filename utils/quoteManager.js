@@ -60,8 +60,9 @@ const timers = {};
 const nextQuotePostTimes = {};
 
 function startScheduler(client, guildId) {
-  if (timers[guildId]) clearInterval(timers[guildId]);
-  
+  if (timers[guildId]) {
+    clearTimeout(timers[guildId]);
+  }
   const config = guildConfigs[guildId];
   if (!config || !config.quoteChannelId || !config.quoteIntervalHours) {
     console.log(`Cannot start scheduler for guild ${guildId}: missing config.`);
@@ -72,40 +73,37 @@ function startScheduler(client, guildId) {
 
   async function postAndSchedule() {
     try {
-      console.log(`[Quote] Attempting to post quote in guild ${guildId}...`);
+      console.log(`[Quote] Posting quote for guild ${guildId}...`);
       await postQuote(client, guildId);
       nextQuotePostTimes[guildId] = Date.now() + intervalMs;
-      console.log(`Posted quote and set next post time for guild ${guildId}.`);
+      timers[guildId] = setTimeout(postAndSchedule, intervalMs);
+      console.log(`[Quote] Next quote for guild ${guildId} scheduled in ${config.quoteIntervalHours} hour(s)`);
     } catch (error) {
-      console.error(`Error posting quote for guild ${guildId}:`, error);
+      console.error(`[Quote] Error posting quote for guild ${guildId}:`, error);
+      // Retry on error after the interval
+      timers[guildId] = setTimeout(postAndSchedule, intervalMs);
     }
   }
 
-  // Post immediately on scheduler start
+  // Start posting chain immediately
   postAndSchedule();
-
-  // Schedule subsequent posts
-  timers[guildId] = setInterval(postAndSchedule, intervalMs);
-  
-  // Set next post time for accuracy
-  nextQuotePostTimes[guildId] = Date.now() + intervalMs;
-  
-  console.log(`Quote scheduler started for guild ${guildId} with interval ${config.quoteIntervalHours} hour(s).`);
 }
 
 async function postQuote(client, guildId) {
   try {
     const config = guildConfigs[guildId];
-    if (!config || !config.quoteChannelId) return;
-    
+    if (!config || !config.quoteChannelId) {
+      console.log(`[Quote] No valid quoteChannelId for guild ${guildId}`);
+      return;
+    }
     const channel = await client.channels.fetch(config.quoteChannelId).catch(() => null);
-    if (!channel) return;
-
+    if (!channel) {
+      console.log(`[Quote] Unable to fetch channel ${config.quoteChannelId} for guild ${guildId}`);
+      return;
+    }
     const quote = await fetchRandomQuote();
-    
-    // Send role mention and quote in the same message
+    console.log(`[Quote] Posting quote in guild ${guildId} channel ${config.quoteChannelId}`);
     await channel.send(`<@&${roleToMention}>\n${quote}`);
-    
   } catch (err) {
     console.error(`[Quote] Failed to post quote for guild ${guildId}:`, err);
   }
@@ -130,7 +128,7 @@ async function setQuoteChannel(interaction) {
   guildConfigs[guildId].quoteChannelId = channel.id;
   saveConfig();
   startScheduler(interaction.client, guildId);
-  
+
   await interaction.reply(`Quote channel set to ${channel.name}`);
 }
 
@@ -149,7 +147,7 @@ async function setQuoteInterval(interaction) {
   guildConfigs[guildId].quoteIntervalHours = hours;
   saveConfig();
   startScheduler(interaction.client, guildId);
-  
+
   await interaction.reply(`Quote interval set to every ${hours} hour(s).`);
 }
 
