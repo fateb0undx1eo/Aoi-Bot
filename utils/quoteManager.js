@@ -3,8 +3,10 @@ const path = require('path');
 const fetch = require('node-fetch');
 
 const configPath = path.resolve(__dirname, '../../guildConfig.json');
-
 let guildConfigs = {};
+
+// Role to mention for quote posts
+const roleToMention = '1415698401621970995';
 
 function loadConfig() {
   try {
@@ -59,7 +61,7 @@ const nextQuotePostTimes = {};
 
 function startScheduler(client, guildId) {
   if (timers[guildId]) clearInterval(timers[guildId]);
-
+  
   const config = guildConfigs[guildId];
   if (!config || !config.quoteChannelId || !config.quoteIntervalHours) {
     console.log(`Cannot start scheduler for guild ${guildId}: missing config.`);
@@ -70,6 +72,7 @@ function startScheduler(client, guildId) {
 
   async function postAndSchedule() {
     try {
+      console.log(`[Quote] Attempting to post quote in guild ${guildId}...`);
       await postQuote(client, guildId);
       nextQuotePostTimes[guildId] = Date.now() + intervalMs;
       console.log(`Posted quote and set next post time for guild ${guildId}.`);
@@ -83,10 +86,10 @@ function startScheduler(client, guildId) {
 
   // Schedule subsequent posts
   timers[guildId] = setInterval(postAndSchedule, intervalMs);
-
+  
   // Set next post time for accuracy
   nextQuotePostTimes[guildId] = Date.now() + intervalMs;
-
+  
   console.log(`Quote scheduler started for guild ${guildId} with interval ${config.quoteIntervalHours} hour(s).`);
 }
 
@@ -94,12 +97,17 @@ async function postQuote(client, guildId) {
   try {
     const config = guildConfigs[guildId];
     if (!config || !config.quoteChannelId) return;
+    
     const channel = await client.channels.fetch(config.quoteChannelId).catch(() => null);
     if (!channel) return;
+
     const quote = await fetchRandomQuote();
-    await channel.send(quote);
+    
+    // Send role mention and quote in the same message
+    await channel.send(`<@&${roleToMention}>\n${quote}`);
+    
   } catch (err) {
-    console.error('Failed to post quote:', err);
+    console.error(`[Quote] Failed to post quote for guild ${guildId}:`, err);
   }
 }
 
@@ -114,12 +122,15 @@ async function setQuoteChannel(interaction) {
   if (!interaction.member.permissions.has('ManageGuild')) {
     return interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
   }
+
   const channel = interaction.options.getChannel('channel');
   const guildId = interaction.guildId;
+
   if (!guildConfigs[guildId]) guildConfigs[guildId] = {};
   guildConfigs[guildId].quoteChannelId = channel.id;
   saveConfig();
   startScheduler(interaction.client, guildId);
+  
   await interaction.reply(`Quote channel set to ${channel.name}`);
 }
 
@@ -127,15 +138,18 @@ async function setQuoteInterval(interaction) {
   if (!interaction.member.permissions.has('ManageGuild')) {
     return interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
   }
+
   const hours = interaction.options.getInteger('hours');
   if (hours < 1) {
     return interaction.reply({ content: 'Interval must be at least 1 hour.', ephemeral: true });
   }
+
   const guildId = interaction.guildId;
   if (!guildConfigs[guildId]) guildConfigs[guildId] = {};
   guildConfigs[guildId].quoteIntervalHours = hours;
   saveConfig();
   startScheduler(interaction.client, guildId);
+  
   await interaction.reply(`Quote interval set to every ${hours} hour(s).`);
 }
 
