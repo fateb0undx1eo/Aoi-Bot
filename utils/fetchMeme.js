@@ -1,6 +1,5 @@
 const fetch = require('node-fetch');
-const memeSubreddits = require('../memesubreddits'); // Import subreddit list
-
+const memeSubreddits = require('../memesubreddits');
 const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID;
 const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET;
 const REDDIT_USER_AGENT = process.env.REDDIT_USER_AGENT;
@@ -16,45 +15,36 @@ async function getRedditToken() {
     },
     body: 'grant_type=client_credentials',
   });
-
   const data = await response.json();
-
   if (!data.access_token) {
     console.error('Reddit OAuth error:', data);
     return null;
   }
-
   return data.access_token;
 }
 
-// Check if URL is supported image format for Discord embeds
 const validExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
 function isSupportedImage(url) {
   if (!url) return false;
-  const urlWithoutParams = url.split('?')[0].toLowerCase(); // strip URL parameters for extension check
+  const urlWithoutParams = url.split('?')[0].toLowerCase();
   return validExtensions.some(ext => urlWithoutParams.endsWith(ext));
 }
 
 async function fetchMeme(subreddits = memeSubreddits) {
   const token = await getRedditToken();
   if (!token) return null;
-
   const subreddit = subreddits[Math.floor(Math.random() * subreddits.length)];
-
   const res = await fetch(`https://oauth.reddit.com/r/${subreddit}/hot?limit=50`, {
     headers: {
       Authorization: `Bearer ${token}`,
       'User-Agent': REDDIT_USER_AGENT,
     },
   });
-
   const data = await res.json();
-
   if (!data || !data.data || !data.data.children) {
     console.error('Reddit API error:', data);
     return null;
   }
-
   // Filter for posts that are safe, image posts, and supported formats
   const posts = data.data.children
     .map(post => post.data)
@@ -63,17 +53,12 @@ async function fetchMeme(subreddits = memeSubreddits) {
       (p.post_hint === 'image' || p.url?.endsWith('.gif')) &&
       isSupportedImage(p.url)
     );
-
   if (!posts.length) return null;
-
   const chosen = posts[Math.floor(Math.random() * posts.length)];
-
   return {
     url: chosen.url,
     postLink: `https://reddit.com${chosen.permalink}`,
     subreddit: chosen.subreddit,
   };
 }
-
 module.exports = fetchMeme;
-
