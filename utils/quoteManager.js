@@ -2,162 +2,162 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 
-const configPath = path.resolve(__dirname, '../../guildConfig.json');
-let guildConfigs = {};
+const configFile = path.resolve(__dirname, '../../guildConfig.json');
 
-// Role to mention for quote posts
-const roleToMention = '1415698401621970995';
-// In-memory scheduler timers and next post timestamps
-const timers = {};
-const nextQuotePostTimes = {};
+let configs = {};
+
+// Role to mention when posting quotes
+const roleMentionId = '1415698401621970995';
+
+const schedulers = {};
+const nextPostTimes = {};
 
 // Load configs from file
-function loadConfig() {
+function loadConfigs() {
   try {
-    if (fs.existsSync(configPath)) {
-      const data = fs.readFileSync(configPath, 'utf8');
-      guildConfigs = JSON.parse(data);
-      console.log(`[QuoteManager] Loaded guildConfigs for ${Object.keys(guildConfigs).length} guild(s).`);
+    if (fs.existsSync(configFile)) {
+      configs = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      console.log(`[QuoteManager] Loaded configs for ${Object.keys(configs).length} guilds`);
     } else {
-      guildConfigs = {};
+      configs = {};
     }
-  } catch (err) {
-    console.error('[QuoteManager] Failed to load guildConfig.json:', err);
-    guildConfigs = {};
+  } catch (e) {
+    console.error('[QuoteManager] Error loading config file:', e);
+    configs = {};
   }
 }
 
-// Save configs to file
-function saveConfig() {
+// Save configs back to file
+function saveConfigs() {
   try {
-    fs.writeFileSync(configPath, JSON.stringify(guildConfigs, null, 2));
-    console.log('[QuoteManager] guildConfig.json saved.');
-  } catch (err) {
-    console.error('[QuoteManager] Failed to save guildConfig.json:', err);
+    fs.writeFileSync(configFile, JSON.stringify(configs, null, 2));
+    console.log('[QuoteManager] Config saved.');
+  } catch (e) {
+    console.error('[QuoteManager] Error saving config file:', e);
   }
 }
 
-// Array of quote API fetch functions (random order & fallback)
-const quoteAPIs = [
+// Quote API list for fallback, randomly chosen each time
+const quoteFetchers = [
   async () => {
     const res = await fetch('https://animechan.vercel.app/api/random');
-    if (!res.ok) throw new Error('Animechan API error');
-    const data = await res.json();
-    return `"${data.quote}" — ${data.character} (${data.anime})`;
+    if (!res.ok) throw new Error('Animechan API failed');
+    const json = await res.json();
+    return `"${json.quote}" — ${json.character} (${json.anime})`;
   },
   async () => {
     const res = await fetch('https://zenquotes.io/api/random');
-    if (!res.ok) throw new Error('ZenQuotes API error');
-    const [data] = await res.json();
-    return `"${data.q}" — ${data.a}`;
+    if (!res.ok) throw new Error('ZenQuotes API failed');
+    const [json] = await res.json();
+    return `"${json.q}" — ${json.a}`;
   },
 ];
 
-// Fetch a random quote trying APIs in random order
-async function fetchRandomQuote() {
-  const shuffled = quoteAPIs.sort(() => Math.random() - 0.5);
-  for (const apiFunc of shuffled) {
+// Attempts quote fetching with fallback logic
+async function getRandomQuote() {
+  const shuffled = quoteFetchers.sort(() => Math.random() - 0.5);
+  for (const fetchQuote of shuffled) {
     try {
-      const quote = await apiFunc();
+      const quote = await fetchQuote();
       if (quote) return quote;
-    } catch (err) {
-      console.warn('[QuoteManager] API fetch error:', err.message);
+    } catch (_) {
+      // continue to next API
     }
   }
-  return 'Sorry, could not fetch a quote at this time.';
+  return 'Sorry, failed to fetch a quote right now.';
 }
 
-// Start or restart the scheduler for a guild
-function startScheduler(client, guildId) {
-  if (timers[guildId]) {
-    clearTimeout(timers[guildId]);
-    delete timers[guildId];
-  }
+// Internal recursive scheduling method
+function schedulePost(client, guildId) {
+  clearTimeout(schedulers[guildId]);
 
-  const config = guildConfigs[guildId];
-  if (!config || !config.quoteChannelId || !config.quoteIntervalHours) {
-    console.log(`[QuoteManager] Scheduler not started for guild ${guildId}: Missing configuration.`);
+  const guildConfig = configs[guildId];
+  if (!guildConfig || !guildConfig.quoteChannelId || !guildConfig.quoteIntervalHours) {
+    console.log(`[QuoteManager] No valid config for guild ${guildId}, scheduler stopped.`);
     return;
   }
 
-  const intervalMs = config.quoteIntervalHours * 60 * 60 * 1000;
+  const intervalMs = guildConfig.quoteIntervalHours * 3600000;
 
-  async function postAndSchedule() {
+  async function postThenSchedule() {
     try {
-      console.log(`[QuoteManager] Posting quote for guild ${guildId}...`);
       await postQuote(client, guildId);
-      nextQuotePostTimes[guildId] = Date.now() + intervalMs;
-      console.log(`[QuoteManager] Next quote for guild ${guildId} scheduled in ${config.quoteIntervalHours} hour(s).`);
-    } catch (error) {
-      console.error(`[QuoteManager] Error posting quote for guild ${guildId}:`, error);
-      // Schedule next attempt even if error occurs
-      nextQuotePostTimes[guildId] = Date.now() + intervalMs;
+      nextPostTimes[guildId] = Date.now() + intervalMs;
+      console.log(`[QuoteManager] Quote posted for guild ${guildId}. Next in ${guildConfig.quoteIntervalHours} hrs.`);
+    } catch (e) {
+      console.error(`[QuoteManager] Error posting quote for guild ${guildId}:`, e);
+      nextPostTimes[guildId] = Date.now() + intervalMs;
     }
-    timers[guildId] = setTimeout(postAndSchedule, intervalMs);
+    schedulers[guildId] = setTimeout(postThenSchedule, intervalMs);
   }
 
-  // Start immediate post and looping scheduler
-  postAndSchedule();
+  postThenSchedule();
 }
 
-// Post the quote with role mention in the same message
+// Public method to start scheduler
+function startScheduler(client, guildId) {
+  schedulePost(client, guildId);
+}
+
+// Posts the quote message in guild's channel with role mention
 async function postQuote(client, guildId) {
-  const config = guildConfigs[guildId];
-  if (!config || !config.quoteChannelId) {
-    console.warn(`[QuoteManager] No quoteChannelId for guild ${guildId}, skipping posting.`);
+  const guildConfig = configs[guildId];
+  if (!guildConfig) return;
+
+  let chan;
+  try {
+    chan = await client.channels.fetch(guildConfig.quoteChannelId);
+  } catch {
+    console.warn(`[QuoteManager] Failed to fetch channel for guild ${guildId}`);
     return;
   }
-  const channel = await client.channels.fetch(config.quoteChannelId).catch(() => null);
-  if (!channel) {
-    console.warn(`[QuoteManager] Unable to fetch channel ${config.quoteChannelId} for guild ${guildId}.`);
-    return;
-  }
-  const quote = await fetchRandomQuote();
-  await channel.send(`<@&${roleToMention}>\n${quote}`);
+  if (!chan || !chan.isTextBased()) return;
+
+  const quote = await getRandomQuote();
+
+  await chan.send(`<@&${roleMentionId}>\n${quote}`);
 }
 
-// Return seconds until next scheduled quote or null if unknown
-function getNextQuoteIn(guildId) {
-  const nextTime = nextQuotePostTimes[guildId];
-  if (!nextTime) return null;
-  const diffMs = nextTime - Date.now();
+// Get seconds until next post or null if unknown
+function getNextPostIn(guildId) {
+  const next = nextPostTimes[guildId];
+  if (!next) return null;
+  const diffMs = next - Date.now();
   return diffMs > 0 ? Math.floor(diffMs / 1000) : 0;
 }
 
-// Interaction command: set quote channel
+// Set quote channel config then start scheduler
 async function setQuoteChannel(interaction) {
   if (!interaction.member.permissions.has('ManageGuild')) {
-    return interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
+    return interaction.reply({ content: 'Manage Server permission required.', ephemeral: true });
   }
   const channel = interaction.options.getChannel('channel');
   const guildId = interaction.guildId;
-  if (!guildConfigs[guildId]) guildConfigs[guildId] = {};
-  guildConfigs[guildId].quoteChannelId = channel.id;
-  saveConfig();
+  if (!configs[guildId]) configs[guildId] = {};
+  configs[guildId].quoteChannelId = channel.id;
+  saveConfigs();
   startScheduler(interaction.client, guildId);
   await interaction.reply(`Quote channel set to ${channel.name}`);
 }
 
-// Interaction command: set quote interval (hours)
+// Set quote interval config then start scheduler
 async function setQuoteInterval(interaction) {
   if (!interaction.member.permissions.has('ManageGuild')) {
-    return interaction.reply({ content: 'You need Manage Server permission.', ephemeral: true });
+    return interaction.reply({ content: 'Manage Server permission required.', ephemeral: true });
   }
   const hours = interaction.options.getInteger('hours');
-  if (hours < 1) {
-    return interaction.reply({ content: 'Interval must be at least 1 hour.', ephemeral: true });
-  }
+  if (hours < 1) return interaction.reply({ content: 'Interval must be at least 1 hour.', ephemeral: true });
   const guildId = interaction.guildId;
-  if (!guildConfigs[guildId]) guildConfigs[guildId] = {};
-  guildConfigs[guildId].quoteIntervalHours = hours;
-  saveConfig();
+  if (!configs[guildId]) configs[guildId] = {};
+  configs[guildId].quoteIntervalHours = hours;
+  saveConfigs();
   startScheduler(interaction.client, guildId);
   await interaction.reply(`Quote interval set to every ${hours} hour(s).`);
 }
 
-// Send quote immediately (for commands)
+// Send a quote immediately (for commands)
 async function sendQuote(interactionOrMessage) {
-  const quote = await fetchRandomQuote();
+  const quote = await getRandomQuote();
   if (interactionOrMessage.reply) {
     await interactionOrMessage.reply(quote);
   } else if (interactionOrMessage.channel) {
@@ -166,11 +166,11 @@ async function sendQuote(interactionOrMessage) {
 }
 
 module.exports = {
-  guildConfigs,
-  loadConfig,
-  saveConfig,
+  configs,
+  loadConfigs,
+  saveConfigs,
   startScheduler,
-  getNextQuoteIn,
+  getNextPostIn,
   setQuoteChannel,
   setQuoteInterval,
   sendQuote,
